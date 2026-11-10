@@ -7,10 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Shithead!" />
-  <!-- Política de segurança: scripts só deste site; conexões só com o servidor de salas.
-       Estilos ainda aceitam "inline" (há estilos dentro do HTML e do JavaScript).
+  <!-- Política de segurança: scripts e estilos só deste site (nada de estilo escrito no HTML:
+       tudo fica em style.css; o código muda estilos só pelo el.style, que a política permite);
+       conexões só com o servidor de salas.
        Os canais WebRTC entre aparelhos não são cobertos por esta política. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Shithead!</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
@@ -25,7 +26,7 @@
 <body>
   <!-- Ícones (SVG): desenhados aqui, usados com <svg class="ico"><use href="#i-nome"/></svg>.
        Traço na cor do texto (currentColor): se ajustam a qualquer botão. -->
-  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg" class="start-hidden" aria-hidden="true">
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
     <symbol id="i-forward" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M19.22 10.39 L21.92 10.70 L21.92 13.30 L19.22 13.61 L18.25 15.96 L19.93 18.09 L18.09 19.93 L15.96 18.25 L13.61 19.22 L13.30 21.92 L10.70 21.92 L10.39 19.22 L8.04 18.25 L5.91 19.93 L4.07 18.09 L5.75 15.96 L4.78 13.61 L2.08 13.30 L2.08 10.70 L4.78 10.39 L5.75 8.04 L4.07 5.91 L5.91 4.07 L8.04 5.75 L10.39 4.78 L10.70 2.08 L13.30 2.08 L13.61 4.78 L15.96 5.75 L18.09 4.07 L19.93 5.91 L18.25 8.04Z"/><circle cx="12" cy="12" r="3"/></symbol>
@@ -123,12 +124,12 @@
           <button id="btn-gallery-photo" class="btn btn-secondary btn-sm" type="button"><svg class="ico"><use href="#i-image"/></svg> Arquivo</button>
           <button id="btn-reset-photo" class="btn btn-secondary btn-sm" type="button">Padrão</button>
         </div>
-        <input type="file" id="inp-file-camera" accept="image/jpeg,image/png,image/webp" capture="user" style="display:none;" />
-        <input type="file" id="inp-file-gallery" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+        <input class="start-hidden" type="file" id="inp-file-camera" accept="image/jpeg,image/png,image/webp" capture="user" />
+        <input class="start-hidden" type="file" id="inp-file-gallery" accept="image/jpeg,image/png,image/webp" />
       </div>
 
       <!-- Avisos de conexão do convidado: um só, colocado na vista ativa -->
-      <div id="join-net-status" class="net-status" style="display:none;" role="status" aria-live="polite"></div>
+      <div id="join-net-status" class="net-status start-hidden" role="status" aria-live="polite"></div>
 
       <!-- ===== INÍCIO ===== -->
       <section id="view-home" class="lobby-view active" data-view="home" aria-label="Início">
@@ -136,11 +137,11 @@
           <div class="profile-slot"></div>
 
           <!-- Partida interrompida (host recarregou a página): oferta de retomada -->
-          <div id="resume-box" class="card-box resume-box" style="display:none;" role="region" aria-label="Partida interrompida">
+          <div id="resume-box" class="card-box resume-box start-hidden" role="region" aria-label="Partida interrompida">
             <h2>Partida interrompida</h2>
             <div id="lbl-resume" class="resume-text"></div>
-            <div class="row" style="gap:6px;">
-              <button id="btn-resume" class="btn btn-success" style="flex:1;"><svg class="ico"><use href="#i-play"/></svg> Retomar partida</button>
+            <div class="row gap-6">
+              <button id="btn-resume" class="btn btn-success flex-1"><svg class="ico"><use href="#i-play"/></svg> Retomar partida</button>
               <button id="btn-resume-discard" class="btn btn-secondary">Descartar</button>
             </div>
           </div>
@@ -171,9 +172,9 @@
               <svg class="ico hero-ico"><use href="#i-enter"/></svg>
               <span><b>Entrar com código</b><small>Alguém já criou a sala</small></span>
             </button>
-            <div id="join-box" class="join-box" style="display:none;">
+            <div id="join-box" class="join-box start-hidden">
               <div class="row">
-                <input type="text" id="inp-room-code" class="room-code-input" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="7" placeholder="Código (ex: KX7RD)" aria-label="Código da sala" style="flex:1;" />
+                <input type="text" id="inp-room-code" class="room-code-input flex-1" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="7" placeholder="Código (ex: KX7RD)" aria-label="Código da sala" />
                 <button id="btn-connect-peer" class="btn btn-success">Entrar</button>
               </div>
             </div>
@@ -206,20 +207,20 @@
       <!-- ===== SALA (host online, convidado ou mesa local) ===== -->
       <section id="view-room" class="lobby-view" data-view="room" aria-label="Sala">
         <div class="scroll-panel">
-          <div id="box-online" class="card-box" style="display:none;">
+          <div id="box-online" class="card-box start-hidden">
             <div class="row">
               <h2 id="lbl-room-title">Sala</h2>
               <button id="btn-leave-room" class="btn btn-secondary btn-xs" type="button"><svg class="ico"><use href="#i-exit"/></svg> <span id="lbl-leave-room">Sair da sala</span></button>
             </div>
-            <div id="host-qr-box" style="display:none; flex-direction:column; align-items:center; gap:6px;">
+            <div id="host-qr-box">
               <div class="room-code-line">Código: <strong id="lbl-room-code">-----</strong></div>
               <div id="qr-container"></div>
               <div id="lbl-invite-url" class="invite-url"></div>
-              <button id="btn-share-invite" class="btn btn-success" style="width:100%;"><svg class="ico"><use href="#i-share"/></svg> Enviar convite (WhatsApp, etc.)</button>
-              <button id="btn-lock-room" class="btn btn-secondary" style="width:100%;" aria-pressed="false">Sala aberta — toque para trancar</button>
+              <button id="btn-share-invite" class="btn btn-success w-full"><svg class="ico"><use href="#i-share"/></svg> Enviar convite (WhatsApp, etc.)</button>
+              <button id="btn-lock-room" class="btn btn-secondary w-full" aria-pressed="false">Sala aberta — toque para trancar</button>
               <div class="hint-text">Quem abrir o link ou ler o QR Code com a câmera entra direto na sala.</div>
             </div>
-            <div id="host-net-status" class="net-status" style="display:none;"></div>
+            <div id="host-net-status" class="net-status start-hidden"></div>
             <div class="status-slot" data-for="room"></div>
           </div>
 
@@ -229,7 +230,7 @@
               <h2>Jogadores (<span id="lbl-player-count">4</span>/6)</h2>
               <button id="btn-add-bot" class="btn btn-secondary btn-xs" type="button"><svg class="ico"><use href="#i-plus"/></svg> Bot</button>
             </div>
-            <div id="slots-container" style="display:flex; flex-direction:column; gap:6px;"></div>
+            <div id="slots-container"></div>
             <div class="row sim-row">
               <label for="chk-sim-bots">Simular só bots (você assiste; não conta no placar)</label>
               <input type="checkbox" id="chk-sim-bots" />
@@ -250,7 +251,7 @@
             </div>
           </div>
 
-          <div class="card-box" id="box-rules" style="display:none;">
+          <div class="card-box start-hidden" id="box-rules">
             <h2>Personalizar regras</h2>
             <div class="row row-select">
               <label for="sel-decks">Número de Baralhos:</label>
@@ -325,7 +326,7 @@
               <label for="inp-bigpile">Monte grande (tensão e "organismo vivo") a partir de:</label>
               <span class="bigpile-input"><input type="number" id="inp-bigpile" min="5" max="99" step="1" value="12" inputmode="numeric" /> cartas</span>
             </div>
-            <div id="warn-no-burn" class="rules-warning" style="display:none;">
+            <div id="warn-no-burn" class="rules-warning start-hidden">
               Sem o 10 e sem "cartas iguais limpam o monte", nenhuma carta sai do jogo: as partidas podem ficar muito longas.
             </div>
           </div>
@@ -375,12 +376,12 @@
           </div>
 
           <!-- Log da última sessão (diagnóstico e ajuste da IA) -->
-          <div class="card-box" id="box-session-log" style="display:none;">
+          <div class="card-box start-hidden" id="box-session-log">
             <h2>Ajuda e diagnóstico</h2>
             <p id="lbl-log-summary" class="hint-text hint-left"></p>
-            <div class="row" style="gap:8px;">
-              <button id="btn-download-log" class="btn btn-secondary btn-sm" style="flex:1;"><svg class="ico"><use href="#i-download"/></svg> Baixar log</button>
-              <button id="btn-copy-log" class="btn btn-secondary btn-sm" style="flex:1;"><svg class="ico"><use href="#i-copy"/></svg> Copiar log</button>
+            <div class="row gap-8">
+              <button id="btn-download-log" class="btn btn-secondary btn-sm flex-1"><svg class="ico"><use href="#i-download"/></svg> Baixar log</button>
+              <button id="btn-copy-log" class="btn btn-secondary btn-sm flex-1"><svg class="ico"><use href="#i-copy"/></svg> Copiar log</button>
             </div>
           </div>
 
@@ -487,9 +488,9 @@
         </div>
         <div class="action-bar">
           <button id="btn-ready-swap" class="btn btn-success">Pronto! Iniciar Jogo</button>
-          <button id="btn-play-selected" class="btn" style="display:none;">Jogar Carta</button>
-          <button id="btn-pickup-pile" class="btn btn-danger" style="display:none;">Pegar Monte</button>
-          <button id="btn-turbo-big" class="btn turbo-big" style="display:none;">⏩ Só restam bots — acelerar até o fim</button>
+          <button id="btn-play-selected" class="btn start-hidden">Jogar Carta</button>
+          <button id="btn-pickup-pile" class="btn btn-danger start-hidden">Pegar Monte</button>
+          <button id="btn-turbo-big" class="btn turbo-big start-hidden">⏩ Só restam bots — acelerar até o fim</button>
         </div>
       </div>
 
@@ -534,9 +535,9 @@
 
       <!-- Modal de Duelo de Velocidade -->
       <div id="modal-speed" class="overlay-modal">
-        <h2 style="color:var(--accent);" id="speed-title">Empate na Carta Mais Baixa!</h2>
-        <p style="font-size:0.9rem; color:var(--text-dim);" id="speed-desc">Quem tocar ou clicar mais rápido joga primeiro!</p>
-        <button id="btn-speed-tap" class="btn btn-success pulse-btn" style="font-size:1.2rem; padding:18px 28px;">JOGAR MAIS RÁPIDO!</button>
+        <h2 id="speed-title">Empate na Carta Mais Baixa!</h2>
+        <p id="speed-desc">Quem tocar ou clicar mais rápido joga primeiro!</p>
+        <button id="btn-speed-tap" class="btn btn-success pulse-btn">JOGAR MAIS RÁPIDO!</button>
       </div>
 
       <!-- Modal de Fim de Rodada (Derrota) -->
@@ -550,8 +551,8 @@
         <p id="gameover-text" class="loser-sub"></p>
         <div id="gameover-scores" class="card-box gameover-scores"></div>
         <div class="gameover-actions">
-          <button id="btn-rematch" class="btn btn-success" style="flex:1;">Nova Rodada</button>
-          <button id="btn-play-again" class="btn btn-secondary" style="flex:1;">Sair p/ Sala</button>
+          <button id="btn-rematch" class="btn btn-success flex-1">Nova Rodada</button>
+          <button id="btn-play-again" class="btn btn-secondary flex-1">Sair p/ Sala</button>
         </div>
       </div>
     </div>

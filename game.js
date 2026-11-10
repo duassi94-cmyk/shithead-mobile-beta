@@ -733,14 +733,14 @@
         if (slot.type === 'human') {
           div.innerHTML = `
             <div class="slot-left">
-              <span class="badge" style="background:#0f172a; color:var(--cyan);">#${idx + 1}</span>
+              <span class="badge slot-num">#${idx + 1}</span>
               <img src="${esc(avatarSrc)}" class="avatar-sm" alt="" />
-              <strong>${esc(slot.name)}${slot.id === myPlayerId ? ' <span style="color:var(--cyan);font-weight:600;">(você)</span>' : ''}</strong>
+              <strong>${esc(slot.name)}${slot.id === myPlayerId ? ' <span class="you-tag">(você)</span>' : ''}</strong>
             </div>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="slot-right">
               ${idx === 0 ? '<span class="badge">Host</span>' : (isHost
                 ? `<span class="badge ${clientConns.some(c => c.__playerId === slot.id) ? 'badge-online' : 'badge-offline'}">${clientConns.some(c => c.__playerId === slot.id) ? 'online' : 'offline'}</span>
-                   <button data-kick="${idx}" class="btn btn-danger" style="padding:3px 7px; font-size:0.72rem;" title="Remover jogador">X</button>`
+                   <button data-kick="${idx}" class="btn btn-danger slot-x" title="Remover jogador">X</button>`
                 : '<span class="badge">Humano</span>')}
             </div>
           `;
@@ -748,7 +748,7 @@
           // Bot: o seletor já mostra o nome (sem nome repetido sobreposto ao seletor)
           div.innerHTML = isHost ? `
             <div class="slot-left slot-left-bot">
-              <span class="badge" style="background:#0f172a; color:var(--cyan);">#${idx + 1}</span>
+              <span class="badge slot-num">#${idx + 1}</span>
               <img src="${esc(avatarSrc)}" class="avatar-sm" alt="" />
               <select data-idx="${idx}" class="sel-bot-persona" title="Nível do bot">
                 <option value="easy" ${slot.persona === 'easy' ? 'selected' : ''}>Tio Barnabé (Fácil)</option>
@@ -757,14 +757,14 @@
                 <option value="random">Aleatório</option>
               </select>
             </div>
-            ${lobbySlots.length > 3 ? `<button data-remove="${idx}" class="btn btn-danger" style="padding:3px 7px; font-size:0.72rem; flex-shrink:0;" title="Remover bot">X</button>` : ''}
+            ${lobbySlots.length > 3 ? `<button data-remove="${idx}" class="btn btn-danger slot-x" title="Remover bot">X</button>` : ''}
           ` : `
             <div class="slot-left">
-              <span class="badge" style="background:#0f172a; color:var(--cyan);">#${idx + 1}</span>
+              <span class="badge slot-num">#${idx + 1}</span>
               <img src="${esc(avatarSrc)}" class="avatar-sm" alt="" />
               <strong>${esc(slot.name)}</strong>
             </div>
-            <span class="badge" style="flex-shrink:0;">IA</span>
+            <span class="badge slot-ia">IA</span>
           `;
         }
         container.appendChild(div);
@@ -3776,7 +3776,7 @@
     });
     document.getElementById('btn-rules-custom').addEventListener('click', () => {
       const box = document.getElementById('box-rules');
-      const open = box.style.display === 'none';
+      const open = getComputedStyle(box).display === 'none'; // escondida pela classe ou pelo código
       box.style.display = open ? 'flex' : 'none';
       document.getElementById('btn-rules-custom').setAttribute('aria-expanded', String(open));
       if (open) box.scrollIntoView({ behavior: 'smooth', block: 'start' });

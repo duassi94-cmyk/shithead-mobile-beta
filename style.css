@@ -1916,3 +1916,22 @@
     }
     .playing-card:focus { outline: none; }
     .playing-card:focus-visible { outline: 3px solid var(--cyan); z-index: 5; }
+
+    /* ===== Estilos que antes ficavam escritos no HTML/JS (a política de segurança não aceita mais) ===== */
+    /* Começa escondido; o código mostra com el.style.display. O :not(#_) só aumenta a prioridade
+       para vencer regras de display das próprias classes (sem !important, que travaria o código). */
+    .start-hidden:not(#_) { display: none; }
+    .flex-1 { flex: 1; }
+    .w-full { width: 100%; }
+    .gap-6 { gap: 6px; }
+    .gap-8 { gap: 8px; }
+    #host-qr-box { display: none; flex-direction: column; align-items: center; gap: 6px; }
+    #slots-container { display: flex; flex-direction: column; gap: 6px; }
+    #speed-title { color: var(--accent); }
+    #speed-desc { font-size: 0.9rem; color: var(--text-dim); }
+    #btn-speed-tap { font-size: 1.2rem; padding: 18px 28px; }
+    .badge.slot-num { background: #0f172a; color: var(--cyan); }
+    .you-tag { color: var(--cyan); font-weight: 600; }
+    .slot-right { display: flex; gap: 6px; align-items: center; }
+    .btn.slot-x { padding: 3px 7px; font-size: 0.72rem; flex-shrink: 0; }
+    .badge.slot-ia { flex-shrink: 0; }
