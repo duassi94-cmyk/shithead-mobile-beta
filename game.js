@@ -2419,7 +2419,7 @@
     /* ==========================================================================
        10. INTERAÇÃO DE PONTEIRO UNIFICADA (MOUSE + TOUCH)
        - Toque: seleciona | toque duplo: joga | arrastar até a mesa: joga
-       - Segurar 2 s numa carta da mão: seleciona todas do mesmo valor
+       - Segurar 2 s numa carta da mão (ou o botão "+ N iguais"): seleciona todas do mesmo valor
        - Na mão, deslizar na horizontal rola as cartas (touch-action: pan-x)
        ========================================================================== */
     const LONG_PRESS_MS = 2000;
@@ -2545,12 +2545,28 @@
       });
     }
 
+    // "+ iguais": todas as cartas com o mesmo valor da carta de referência que podem ir
+    // juntas nesta jogada — as da mão e, com o baralho vazio e a mão toda desse valor,
+    // também as da mesa (mesma regra de toggleSelectOpenCard)
+    function sameValueGroup(me, card) {
+      const same = (c) => (c.isJoker || card.isJoker ? c.isJoker && card.isJoker : c.val === card.val);
+      const hand = me.hand.filter(same);
+      const fromHand = me.hand.some(c => c.id === card.id);
+      let open = [];
+      if (G.deck.length === 0 && (fromHand ? hand.length === me.hand.length : me.hand.length === 0)) open = me.open.filter(same);
+      return { hand, open };
+    }
+    // Carta de referência = a primeira selecionada; null sem seleção
+    function selectionAnchor(me) {
+      return me.hand.find(c => selectedHandIds.has(c.id)) || me.open.find(c => selectedOpenIds.has(c.id)) || null;
+    }
     function selectAllSameValue(me, card) {
       if (!G || G.phase !== 'PLAY') return;
-      const same = me.hand.filter(c => !c.isJoker && !card.isJoker ? c.val === card.val : c.isJoker && card.isJoker);
+      const { hand, open } = sameValueGroup(me, card);
       selectedHandIds.clear();
       selectedOpenIds.clear();
-      same.forEach(c => selectedHandIds.add(c.id));
+      hand.forEach(c => selectedHandIds.add(c.id));
+      open.forEach(c => selectedOpenIds.add(c.id));
       safeVibrate(30);
       SoundEngine.select();
       renderGame();
@@ -3118,6 +3134,7 @@
       document.getElementById('reaction-bar').style.display = (spectator || G.mode === 'tutorial') ? 'none' : 'flex';
 
       if (G.phase === 'SWAP') {
+        document.getElementById('btn-select-same').hidden = true;
         btnReady.style.display = 'block';
         btnReady.disabled = me.readySwap;
         btnReady.textContent = me.readySwap ? 'Aguardando outros...' : 'Pronto! Iniciar Jogo';
@@ -3129,6 +3146,16 @@
         btnPickup.style.display = me.escaped ? 'none' : 'block';
 
         const totalSel = selectedHandIds.size + selectedOpenIds.size;
+        // "+ N iguais" no cabeçalho da mão: aparece quando há mais cartas do mesmo valor para pegar
+        const anchor = me.escaped ? null : selectionAnchor(me);
+        const group = anchor ? sameValueGroup(me, anchor) : null;
+        const extra = group ? group.hand.length + group.open.length - totalSel : 0;
+        const btnSame = document.getElementById('btn-select-same');
+        btnSame.hidden = extra <= 0;
+        if (extra > 0) {
+          btnSame.textContent = `+ ${extra} ${extra === 1 ? 'igual' : 'iguais'}`;
+          btnSame.setAttribute('aria-label', `Selecionar mais ${extra} ${extra === 1 ? 'carta' : 'cartas'} de mesmo valor`);
+        }
         btnPlay.disabled = !isMyTurn;
         btnPlay.textContent = totalSel > 0 ? `Jogar (${totalSel})` : 'Jogar Carta';
 
@@ -3196,6 +3223,12 @@
 
       if (G.mode === 'tutorial') runTutorialCoach(me, isMyTurn);
     }
+
+    document.getElementById('btn-select-same').addEventListener('click', () => {
+      const me = G && G.players.find(p => p.id === myPlayerId);
+      const anchor = me && selectionAnchor(me);
+      if (anchor) selectAllSameValue(me, anchor);
+    });
 
     function toggleSelectHandCard(me, card) {
       SoundEngine.select();

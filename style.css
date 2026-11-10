@@ -1897,3 +1897,5 @@
     #board-overlay .board-tab { min-height: var(--tap); font-size: var(--fs-md); padding: 0 12px; }
     #board-overlay .board-tabs { min-width: 0; }
     #board-overlay #btn-board-close { min-height: var(--tap); font-size: var(--fs-md); }
+    /* "+ N iguais": ao lado do Recolher, em destaque */
+    #btn-select-same { margin-left: auto; background: rgba(245, 158, 11, 0.18); border-color: var(--accent); color: #fde68a; }

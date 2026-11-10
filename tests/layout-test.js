@@ -35,6 +35,9 @@
     G.discard = [{ ...me.hand[0], id: 'zz', val: 13, label: 'K', isJoker: false }];
     G.discardPlayGroups = [{ playerName: 'Madame Lola (Médio)', cards: G.discard.slice() }];
     G.bannerText = G.players[1].name + ' revelou 10♥ inválido e recolheu tudo!';
+    // uma carta repetida selecionada: o botão "+ iguais" aparece no cabeçalho da mão
+    const dup = me.hand.find(c => me.hand.some(d => d !== c && d.val === c.val));
+    selectedHandIds.clear(); selectedOpenIds.clear(); if (dup) selectedHandIds.add(dup.id);
     renderGame(); refreshSpecialReactions();
   };
 
@@ -72,6 +75,7 @@
     inV(document.getElementById('hand-layer'), 'mão ampliada');
     piles.forEach((p, j) => { if (p.bottom > L.top + 2) out.push('mão ampliada cobre pilha ' + j); });
     if (!fits(document.querySelector('.hand-layer-head'))) out.push('cabeçalho da mão não cabe');
+    if (document.getElementById('btn-select-same').hidden) out.push('+ iguais não apareceu');
     const cards = [...document.querySelectorAll('#my-hand-cards .playing-card')];
     if (cards.some(c => { const r = R(c); return r.top < S.top - 0.5 || r.bottom > S.bottom + 0.5; })) out.push('cartas passam da altura da mão');
     const lt = document.getElementById('layer-table-slot'); [...lt.querySelectorAll('.playing-card')].forEach(c => { if (!inside(R(c), L)) out.push('carta da mesa cortada na camada'); });
