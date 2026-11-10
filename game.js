@@ -1336,7 +1336,12 @@
       new QRCode(qrEl, { text: url, width: 156, height: 156, correctLevel: QRCode.CorrectLevel.M });
     }
 
-    function createHostRoom(attempt = 0) {
+    // opts.code + opts.resume: reabre a mesma sala (retomada do host), sem zerar placar,
+    // trava da sala nem o log da sessão
+    let hostRetryTimer = null;
+    const REOPEN_WAITS_S = [3, 5, 10, 15, 20, 30]; // ~80 s: o servidor segura o nome por até ~1 min
+    function createHostRoom(attempt = 0, opts = {}) {
+      clearTimeout(hostRetryTimer);
       if (myPeer) myPeer.destroy();
       isHost = true;
       // "Você" só faz sentido na própria tela: online, o host precisa de um nome
@@ -1344,33 +1349,51 @@
         lobbySlots[0].name = 'Anfitrião';
         renderLobbySlots();
       }
-      roomCode = newRoomCode();
-      if (attempt === 0) {
+      roomCode = opts.code || newRoomCode();
+      if (attempt === 0 && !opts.resume) {
         sessionRecords = []; renderScoreboard(); // sala nova = sessão nova
         setRoomLocked(false);
       }
-      setNetStatus('host-net-status', 'Criando sala...', 'info');
+      setNetStatus('host-net-status', opts.resume ? `Reabrindo a sala ${roomCode}...` : 'Criando sala...', 'info');
       const t0 = Date.now();
-      nlog('room_create', { attempt, env: attempt === 0 ? NetLog.environment() : undefined });
-      myPeer = new Peer(PEER_PREFIX + roomCode);
+      nlog('room_create', { attempt, resume: !!opts.resume, env: attempt === 0 ? NetLog.environment() : undefined });
+      const peer = new Peer(PEER_PREFIX + roomCode);
+      myPeer = peer;
 
       myPeer.on('open', () => {
         renderHostInvite();
-        setNetStatus('host-net-status', 'Sala aberta! Aguardando jogadores...', 'ok');
-        nlog('room_open', { ms: Date.now() - t0, server: myPeer.options && myPeer.options.host });
-        LoggerModule.initNewSession(getRulesFromUI(), lobbySlots);
+        setNetStatus('host-net-status', opts.resume ? `Sala ${roomCode} reaberta! Os convidados estão voltando...` : 'Sala aberta! Aguardando jogadores...', 'ok');
+        nlog('room_open', { ms: Date.now() - t0, resume: !!opts.resume, attempt, server: peer.options && peer.options.host });
+        if (opts.resume) {
+          if (G) { G.bannerText = `Sala ${roomCode} reaberta — esperando os convidados voltarem.`; renderGame(); }
+        } else {
+          LoggerModule.initNewSession(getRulesFromUI(), lobbySlots);
+        }
       });
 
       myPeer.on('error', (err) => {
         nlog('peer_error', errInfo(err));
         NetLog.count('peer_error_' + (err && err.type));
-        // Código já em uso por outra sala: sorteia outro
-        if (err.type === 'unavailable-id' && attempt < 5) { createHostRoom(attempt + 1); return; }
+        if (err.type === 'unavailable-id') {
+          peer.__idTaken = true; // o "desconectado" que vem em seguida não é queda de rede
+          // Retomada: o nome da sala ainda está preso no servidor (a conexão antiga não
+          // expirou). Insiste no MESMO código — com outro, os convidados não achariam a sala.
+          if (opts.code && attempt < REOPEN_WAITS_S.length && peer === myPeer) {
+            const wait = REOPEN_WAITS_S[attempt];
+            setNetStatus('host-net-status', `A sala ${roomCode} ainda está presa no servidor. Tentando de novo em ${wait} s...`, 'warn');
+            if (G && opts.resume) { G.bannerText = `Reabrindo a sala ${roomCode}... (tentando de novo em ${wait} s)`; renderGame(); }
+            hostRetryTimer = setTimeout(() => { if (myPeer === peer) createHostRoom(attempt + 1, opts); }, wait * 1000);
+            return;
+          }
+          // Sala nova: código já em uso por outra sala, sorteia outro
+          if (!opts.code && attempt < 5) { createHostRoom(attempt + 1); return; }
+        }
         setNetStatus('host-net-status', peerErrorText(err), 'error');
       });
 
       // Queda com o servidor de salas: as conexões já abertas continuam; tenta reabrir a sala
       myPeer.on('disconnected', () => {
+        if (peer.__idTaken || peer !== myPeer) return;
         nlog('server_disconnected', { guests: clientConns.length });
         NetLog.count('server_disconnected');
         setNetStatus('host-net-status', 'Reconectando ao servidor de salas...', 'warn');
@@ -1464,6 +1487,8 @@
       SoundEngine.init();
       joinRoomCode = code;
       isHost = false;
+      const resumeBox = document.getElementById('resume-box');
+      if (resumeBox) resumeBox.style.display = 'none';
       // Identificador fixo deste aparelho/navegador: recarregar a página, a tela
       // apagar ou o navegador fechar a aba não criam um jogador novo — o host
       // reconhece o aparelho e devolve o mesmo lugar na mesa.
@@ -1492,6 +1517,12 @@
             nlog('conn_slow', { waitedS: 9, ice: conn.peerConnection ? conn.peerConnection.iceConnectionState : null });
             NetLog.count('conn_slow');
             setNetStatus('join-net-status', 'A conexão está demorando... Se não entrar, tente outra rede (Wi-Fi ↔ 4G).', 'warn');
+            // Voltando para a sala (ex.: o host recarregou e o nome antigo ainda responde no
+            // servidor): tenta de novo em vez de esperar para sempre
+            if (waitingHostReturn()) {
+              clearTimeout(reconnectTimer);
+              reconnectTimer = setTimeout(() => { if (joinRoomCode && !(hostConn && hostConn.open)) joinRoom(joinRoomCode); }, 3000);
+            }
           }
         }, 9000);
         // Acompanha o ICE desde o começo (mostra se a rede está bloqueando a ligação direta)
@@ -1499,7 +1530,8 @@
         conn.on('open', () => {
           clearTimeout(timeout);
           conn.__openedAt = Date.now();
-          nlog('conn_open', { ms: Date.now() - t0, attempt: joinAttempts });
+          nlog('conn_open', { ms: Date.now() - t0, attempt: joinAttempts, afterHostLostS: hostLostAt ? Math.round((Date.now() - hostLostAt) / 1000) : undefined });
+          hostLostAt = 0;
           retryCount = 0;
           watchPeerConnection(conn, 'host');
           const myName = document.getElementById('inp-name').value.trim() || 'Jogador';
@@ -1528,7 +1560,32 @@
         nlog('peer_error', errInfo(err));
         NetLog.count('peer_error_' + (err && err.type));
         setNetStatus('join-net-status', peerErrorText(err), 'error');
-        if (err.type === 'peer-unavailable') { setGuestLobbyMode(false); return; }
+        if (err.type === 'peer-unavailable') {
+          // Eu estava nesta sala e o host sumiu: ele pode estar recarregando a página
+          // (retomada). Continua tentando por alguns minutos em vez de desistir.
+          if (waitingHostReturn() && peer === myPeer) {
+            retryCount = Math.min(retryCount + 1, 6);
+            const wait = Math.min(15000, 2500 * retryCount);
+            const leftS = Math.max(0, Math.round((HOST_RETURN_WAIT_MS - (Date.now() - hostLostAt)) / 1000));
+            setNetStatus('join-net-status', `O host saiu da sala. Esperando ele voltar (até ${Math.ceil(leftS / 60)} min)...`, 'warn');
+            if (G && document.getElementById('screen-game').classList.contains('active')) {
+              G.bannerText = 'O host saiu — esperando ele voltar para a mesa...';
+              renderGame();
+            }
+            nlog('host_wait', { retry: retryCount, inS: Math.round(wait / 1000), leftS });
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => { if (joinRoomCode && !(hostConn && hostConn.open)) joinRoom(joinRoomCode); }, wait);
+            return;
+          }
+          if (hostLostAt) {
+            nlog('host_gave_up', { waitedS: Math.round((Date.now() - hostLostAt) / 1000) });
+            setNetStatus('join-net-status', 'O host não voltou para a sala. Peça um link novo para jogar de novo.', 'error');
+            showInvalidWarning('O host não voltou para a sala.');
+            hostLostAt = 0;
+          }
+          setGuestLobbyMode(false);
+          return;
+        }
         // Falha de rede/servidor (comum ao voltar da tela apagada): tenta de novo com
         // intervalos crescentes (3 s, 6 s, 12 s… até 30 s). Com a tela apagada, espera
         // ela voltar — o aviso de "tela visível" reconecta na hora.
@@ -1561,6 +1618,13 @@
 
     let joinAttempts = 0;
     let lastLostReason = null;
+    // Quando a conexão com o host caiu (0 = conectado). Enquanto durar a espera, o convidado
+    // insiste em voltar, mesmo que o servidor diga que a sala não existe (host recarregando).
+    let hostLostAt = 0;
+    const HOST_RETURN_WAIT_MS = 3 * 60 * 1000;
+    function waitingHostReturn() {
+      return !!(hostLostAt && joinRoomCode && Date.now() - hostLostAt < HOST_RETURN_WAIT_MS);
+    }
 
     function handleHostLost(reason = 'desconhecido') {
       if (isHost || !joinRoomCode) return;
@@ -1569,6 +1633,7 @@
         ice: hostConn && hostConn.peerConnection ? hostConn.peerConnection.iceConnectionState : null });
       NetLog.count('host_lost_' + reason);
       lastLostReason = reason;
+      if (!hostLostAt) hostLostAt = Date.now();
       if (hostConn) hostConn.__stale = true;
       showInvalidWarning('Conexão com o host perdida. Tentando voltar...');
       setNetStatus('join-net-status', 'Conexão perdida. Tentando voltar à sala...', 'warn');
@@ -1971,6 +2036,7 @@
     }
 
     function broadcastState(fx = null) {
+      saveHostResume(); // entrada, saída, bot assumindo: tudo que muda a mesa passa por aqui
       if (!isHost || clientConns.length === 0) return;
       // Uma versão nova por transmissão (antes subia uma vez por convidado)
       G.version = (G.version || 0) + 1;
@@ -2069,6 +2135,118 @@
       if (G && matchActionCount > 0 && matchActionCount % 20 === 0) LoggerModule.logCheck(matchActionCount, stateDigest(G));
     }
 
+    /* ---- Retomada do host --------------------------------------------------------
+       O host grava a partida em andamento a cada mudança (mesa, lugares, segredos dos
+       convidados, código da sala). Se a página recarregar ou o celular fechar o app,
+       ao abrir de novo o jogo oferece retomar: reabre a mesma sala, os convidados voltam
+       sozinhos e um bot joga por eles até reconectarem. Vale por 30 minutos.
+       A gravação roda no fim da mesma tarefa da jogada (microtarefa): se a página
+       morrer, morre entre jogadas, e o log e a mesa gravada ficam sempre de acordo. */
+    const RESUME_KEY = 'sh_host_resume';
+    const RESUME_MAX_AGE_MS = 30 * 60 * 1000;
+    const RESUMABLE = ['SWAP', 'SPEED_TIE', 'PLAY'];
+    let resumeSavePending = false;
+
+    function saveHostResume() {
+      if (resumeSavePending) return;
+      resumeSavePending = true;
+      queueMicrotask(() => { resumeSavePending = false; writeHostResume(); });
+    }
+
+    function writeHostResume() {
+      // Sem mesa (página acabou de abrir, oferta de retomada na tela): não mexe no que está gravado
+      if (!isHost || !G) return;
+      // Começou outra coisa: a oferta antiga deixa de valer
+      const box = document.getElementById('resume-box');
+      if (box) box.style.display = 'none';
+      if (!RESUMABLE.includes(G.phase) || G.mode === 'tutorial') { Store.remove(RESUME_KEY); return; }
+      Store.set(RESUME_KEY, JSON.stringify({
+        v: 1, at: Date.now(), build: AppConfig.BUILD, protocol: AppConfig.PROTOCOL, env: AppConfig.ENV,
+        roomCode, roomLocked, mode: currentMode, matchStartedAt, matchActionCount,
+        log: LoggerModule.currentMatchRef(), lobbySlots, guestSecrets, sessionRecords, G
+      }));
+    }
+
+    function loadHostResume() {
+      let d = null;
+      try { d = JSON.parse(Store.get(RESUME_KEY) || 'null'); } catch (e) { d = null; }
+      const ok = d && d.v === 1 && d.G && Array.isArray(d.G.players) && RESUMABLE.includes(d.G.phase) &&
+        Date.now() - d.at < RESUME_MAX_AGE_MS && d.protocol === AppConfig.PROTOCOL && d.env === AppConfig.ENV;
+      if (!ok) { if (d) Store.remove(RESUME_KEY); return null; }
+      return d;
+    }
+
+    // Ao abrir o jogo: se há partida interrompida deste aparelho como host, oferece retomar
+    function offerHostResume() {
+      const d = loadHostResume();
+      const box = document.getElementById('resume-box');
+      if (!d || !box) return;
+      const mins = Math.max(1, Math.round((Date.now() - d.at) / 60000));
+      const where = d.roomCode ? `na sala ${d.roomCode}` : 'contra os bots';
+      document.getElementById('lbl-resume').textContent =
+        `Sua partida ${where} (${d.G.players.length} jogadores) foi interrompida há ${mins} min.` +
+        (d.roomCode ? ' Os convidados voltam sozinhos quando a sala reabrir.' : '');
+      box.style.display = 'flex';
+      document.getElementById('btn-resume').onclick = () => resumeHostMatch(d);
+      document.getElementById('btn-resume-discard').onclick = () => {
+        Store.remove(RESUME_KEY);
+        box.style.display = 'none';
+        nlog('host_resume_discarded', { awayS: Math.round((Date.now() - d.at) / 1000) });
+      };
+    }
+
+    function resumeHostMatch(d) {
+      document.getElementById('resume-box').style.display = 'none';
+      SoundEngine.init();
+      isHost = true;
+      lobbySlots = d.lobbySlots;
+      Object.keys(guestSecrets).forEach(k => { delete guestSecrets[k]; });
+      Object.assign(guestSecrets, d.guestSecrets || {});
+      sessionRecords = Array.isArray(d.sessionRecords) ? d.sessionRecords : [];
+      currentMode = d.mode || 'normal';
+      matchStartedAt = d.matchStartedAt || Date.now();
+      matchActionCount = d.matchActionCount || 0;
+      turboMode = false;
+      coachOpen = false;
+      speedLock = false;
+      G = d.G;
+      // Os convidados podem ter recebido uma versão um pouco mais nova: a retomada passa à frente
+      G.version = (G.version || 0) + 1000;
+      G.turbo = false;
+      const logOk = LoggerModule.resumeSession(d.log);
+      nlog('host_resumed', { phase: G.phase, actions: matchActionCount, online: !!d.roomCode, awayS: Math.round((Date.now() - d.at) / 1000), log: logOk });
+      // Os convidados estão fora até reconectarem: um bot joga por eles (como numa queda)
+      const away = G.players.filter(p => p.id !== myPlayerId && p.type === 'human');
+      away.forEach(p => {
+        p.type = 'bot';
+        p.persona = 'medium';
+        markReadyByTakeover(p);
+        p.disconnected = true;
+      });
+      G.bannerText = away.length
+        ? 'Partida retomada! Os convidados estão voltando — um bot joga por eles até reconectarem.'
+        : 'Partida retomada!';
+      renderScoreboard();
+      selectedHandIds.clear();
+      selectedOpenIds.clear();
+      document.getElementById('modal-gameover').classList.remove('active');
+      document.getElementById('screen-lobby').classList.remove('active');
+      document.getElementById('screen-game').classList.add('active');
+      if (d.roomCode) {
+        setRoomLocked(!!d.roomLocked);
+        createHostRoom(0, { code: d.roomCode, resume: true });
+      }
+      renderGame();
+      if (G.phase === 'SWAP' && G.players.every(p => p.readySwap)) evaluateStartAndDirection();
+      else if (G.phase === 'SPEED_TIE' && G.tieContext) startBotSpeedTaps(G.tieContext.candidates);
+      scheduleBotIfNeeded();
+      saveHostResume();
+    }
+
+    // Página sendo fechada/escondida: grava na hora (não espera a próxima jogada)
+    window.addEventListener('pagehide', () => writeHostResume());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) writeHostResume(); });
+
     // opts (usado pelo replay): { seed, rules, slots } — sem eles, sorteia uma semente nova
     // e usa as regras e os lugares do lobby, como sempre.
     function startNewMatch(isRematch = false, mode = null, opts = {}) {
@@ -2103,7 +2281,9 @@
       G = dealt.state;
 
       G.players.forEach((p, idx) => {
-        if (p.type === 'bot') AIEngine.performInitialSwap(G, idx);
+        if (p.type !== 'bot') return;
+        AIEngine.performInitialSwap(G, idx);
+        LoggerModule.logSwap(p, p.open, p.hand);
       });
 
       selectedHandIds.clear();
@@ -2117,6 +2297,7 @@
 
       broadcastState({ kind: 'SLIDE_INIT', sfxTag: 'SLIDE' });
       renderGame();
+      saveHostResume();
 
       // Todos são bots (simulação): começa sozinho após a preparação
       if (G.players.every(p => p.readySwap)) {
@@ -2128,6 +2309,7 @@
     function evaluateStartAndDirection() {
       if (!G) return;
       runCoreEvents(Core.startIfReady(G));
+      saveHostResume();
     }
 
     // Duelo de velocidade: cada bot empatado "toca" depois de um tempo sorteado
@@ -2153,6 +2335,7 @@
       recordReplayAction(G.players[winnerIdx].id, { type: 'SPEED_WIN', idx: winnerIdx });
 
       runCoreEvents(Core.speedWin(G, winnerIdx).events);
+      saveHostResume();
     }
 
     function attemptLocalPlay(handIds, openIds, fromRect = null) {
@@ -2226,6 +2409,7 @@
       if (plausible) recordReplayAction(playerId, action);
       applyPlayerAction(playerId, action);
       if (plausible) recordReplayCheck();
+      saveHostResume();
     }
 
     function applyPlayerAction(playerId, action) {
@@ -3580,6 +3764,7 @@
       coachOpen = false;
       document.getElementById('coach-bubble').classList.remove('show');
       if (G && G.phase !== 'GAMEOVER') G.phase = 'ABANDONED'; // para os bots
+      saveHostResume(); // partida abandonada: não há o que retomar
       document.getElementById('modal-gameover').classList.remove('active');
       document.getElementById('screen-game').classList.remove('active');
       document.getElementById('screen-lobby').classList.add('active');
@@ -3617,3 +3802,4 @@
     AUDIO_UNLOCK_EVENTS.forEach(ev => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
 
     loadSavedSetup();
+    if (!/[?&]sala=/.test(location.search)) offerHostResume();

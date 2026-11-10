@@ -47,6 +47,15 @@ await Replay.all(logExportado);      // todas as partidas do log
 `ok: true` = a partida reproduzida bateu em tudo. Partidas interrompidas no meio
 aparecem com "o log não tem o final", mas as conferências até ali continuam valendo.
 
+## Retomada do host
+
+O host grava a partida em andamento (`sh_host_resume`, 30 min). Para testar à mão:
+1. Numa aba, crie a sala e entre com outra aba pelo link; comece a partida.
+2. Recarregue a aba do host no meio da partida: o convidado mostra "esperando o host voltar".
+3. No host, toque em "Retomar partida": a mesma sala reabre (se o servidor ainda segurar o
+   código, o host tenta de novo em 3, 5, 10... s) e o convidado volta para o próprio lugar.
+4. No fim, `Replay.fromSaved()` no host deve dar `ok: true` (o log continua na mesma partida).
+
 ## Simulação
 
 ```js

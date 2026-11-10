@@ -70,7 +70,7 @@
       VERSION: 'shithead-mobile-v5',
       // Build publicado: data + número da publicação do dia. Atualizar a cada publicação
       // no GitHub para os logs dizerem exatamente qual código estava rodando.
-      BUILD: '2026-11-10.4',
+      BUILD: '2026-11-10.6',
       // Versão do formato das mensagens entre aparelhos. Mudou o formato? Some 1:
       // o host pede para quem estiver com a versão antiga atualizar a página.
       PROTOCOL: 2,
@@ -372,6 +372,23 @@
         }
       }
 
+      // Qual partida do log está em andamento (a retomada do host confere antes de continuar nela)
+      function currentMatchRef() {
+        const m = currentMatch();
+        return m && sessionData ? { sessionId: sessionData.sessionId, matchNumber: m.matchNumber } : null;
+      }
+
+      // Host recarregou a página no meio da partida: volta a gravar na mesma partida do log
+      function resumeSession(ref) {
+        const saved = getSavedSession();
+        const m = saved && Array.isArray(saved.matches) ? saved.matches[saved.matches.length - 1] : null;
+        if (!m || !ref || saved.sessionId !== ref.sessionId || m.matchNumber !== ref.matchNumber) return false;
+        sessionData = saved;
+        (m.resumes || (m.resumes = [])).push(new Date().toISOString());
+        saveToStorage();
+        return true;
+      }
+
       function getSavedSession() {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
@@ -423,6 +440,8 @@
         logMatchEnd,
         setMatchMode,
         describeRules,
+        currentMatchRef,
+        resumeSession,
         getSavedSession,
         getExport,
         downloadLastSession
@@ -1173,18 +1192,15 @@
         return card.val;
       }
 
+      // Troca inicial do bot (só decide e arruma as cartas; o registro no log é do jogo)
       function performInitialSwap(state, playerIdx) {
         const p = state.players[playerIdx];
-        if (p.persona === 'easy') {
-          LoggerModule.logSwap(p, p.open, p.hand);
-          return;
-        }
+        if (p.persona === 'easy') return;
         const combined = [...p.hand, ...p.open].sort(
           (a, b) => cardStrategicWeight(b, state.rules) - cardStrategicWeight(a, state.rules)
         );
         p.open = combined.slice(0, 3);
         p.hand = combined.slice(3, 6);
-        LoggerModule.logSwap(p, p.open, p.hand);
       }
 
       // Quantos turnos sem progresso (por jogador ativo) até a IA entrar em "modo destravar"
@@ -1398,7 +1414,7 @@
 
       // Cópia da mesa do ponto de vista do bot, com as cartas desconhecidas redistribuídas
       function determinize(state, botIdx) {
-        const s = SimEngine.clone(state);
+        const s = Core.cloneForSim(state);
         const unknown = [...s.deck];
         s.players.forEach((p, i) => {
           unknown.push(...p.closed);
@@ -1478,11 +1494,12 @@
           for (let i = 0; i < rollouts; i++) {
             const s = determinize(state, botIdx);
             s.plies = 0;
-            SimEngine.apply(s, botIdx, action);
-            while (!s.over && s.plies < depth) {
+            // Mesmas regras da partida real (core.js), numa cópia que não toca a mesa
+            if (Core.apply(s, s.players[botIdx].id, action).ok) s.plies++;
+            while (s.phase === 'PLAY' && s.plies < depth) {
               const a = rolloutPolicy(s, s.turnIdx);
-              if (!a) break;
-              SimEngine.apply(s, s.turnIdx, a);
+              if (!a || !Core.apply(s, s.players[s.turnIdx].id, a).ok) break;
+              s.plies++;
             }
             total += evaluate(s, botId);
           }
@@ -1495,150 +1512,5 @@
       }
 
       return { performInitialSwap, decideTurnAction, isStalled, options };
-    })();
-
-    /* ==========================================================================
-       6b. SIMULADOR PURO DE REGRAS (SimEngine)
-       Mesmas regras de game.js, mas sem tela, som, rede ou log.
-       Usado pela IA para "imaginar" jogadas futuras.
-       ========================================================================== */
-    const SimEngine = (() => {
-      function clone(state) {
-        return {
-          rules: state.rules,
-          deck: [...state.deck],
-          discard: [...state.discard],
-          burnedCount: state.burnedCount || 0,
-          players: state.players.map(p => ({
-            id: p.id, type: p.type, persona: p.persona, escaped: p.escaped,
-            hand: [...p.hand], open: [...p.open], closed: [...p.closed]
-          })),
-          turnIdx: state.turnIdx,
-          direction: state.direction,
-          constraint7: state.constraint7,
-          freePlayAfterJoker: state.freePlayAfterJoker,
-          freePlayAfter2: state.freePlayAfter2,
-          stall: null,
-          over: false,
-          plies: 0
-        };
-      }
-
-      function resetPileFlags(s) {
-        s.constraint7 = false;
-        s.freePlayAfterJoker = false;
-        s.freePlayAfter2 = false;
-      }
-
-      function nextTurn(s, again) {
-        s.plies++;
-        const active = s.players.filter(p => !p.escaped);
-        if (active.length <= 1) { s.over = true; return; }
-        const sameAgain = again && !s.players[s.turnIdx].escaped;
-        if (!sameAgain) {
-          s.turnIdx = RulesEngine.getNextActivePlayerIndex(s, s.turnIdx);
-        }
-        // Mesma regra do jogo: com baralho, a vez começa com a mão completa
-        const p = s.players[s.turnIdx];
-        if (s.deck.length > 0 && p && !p.escaped) {
-          const target = sameAgain ? (p.hand.length === 0 ? Math.min(3, s.rules.draw2 || 1) : 0) : 3;
-          const need = Math.min(target - p.hand.length, s.deck.length);
-          if (need > 0) p.hand.push(...s.deck.splice(0, need));
-        }
-      }
-
-      function pickup(s, p, extra = []) {
-        p.hand.push(...s.discard, ...extra);
-        s.discard = [];
-        resetPileFlags(s);
-      }
-
-      function rotateHands(s, steps) {
-        const active = s.players.filter(p => !p.escaped);
-        if (active.length < 2) return;
-        const total = steps % active.length;
-        for (let k = 0; k < total; k++) {
-          const snap = active.map(p => p.hand);
-          active.forEach((p, i) => { active[(i + s.direction + active.length) % active.length].hand = snap[i]; });
-        }
-      }
-
-      function play(s, p, cards) {
-        const r = s.rules;
-        const sample = cards[0];
-        s.discard.push(...cards);
-        resetPileFlags(s);
-        let again = false;
-        let burned = false;
-
-        const target = r.decks === 1 ? 4 : 8;
-        if (r.p48 && !sample.isJoker) {
-          let reversed = false;
-          if (r.mode48 === 'together') {
-            reversed = cards.length >= target;
-          } else {
-            let seq = 0;
-            for (let i = s.discard.length - 1; i >= 0; i--) {
-              if (!s.discard[i].isJoker && s.discard[i].val === sample.val) seq++; else break;
-            }
-            reversed = seq >= target;
-          }
-          if (reversed) {
-            s.direction *= -1;
-            if (r.burn48) burned = true;
-          }
-        }
-        if (sample.val === 10 && r.p10) {
-          burned = true;
-          if (r.after10 === 'again') again = true;
-        }
-        if (sample.val === 7 && r.p7 && !burned) s.constraint7 = true;
-        if (sample.val === 15 && r.p2) {
-          again = true;
-          s.freePlayAfter2 = true;
-          if (p.hand.length === 0 && s.deck.length > 0) p.hand.push(...s.deck.splice(0, Math.min(r.draw2, s.deck.length)));
-        }
-        if (sample.isJoker && r.pjoker) {
-          s.freePlayAfterJoker = true;
-          rotateHands(s, r.multijoker === 'per_joker' ? cards.length : 1);
-        }
-        if (burned) {
-          s.burnedCount += s.discard.length;
-          s.discard = [];
-          resetPileFlags(s);
-        }
-        if (!again && s.deck.length > 0 && p.hand.length < 3) {
-          p.hand.push(...s.deck.splice(0, Math.min(3 - p.hand.length, s.deck.length)));
-        }
-        s.players.forEach(pl => {
-          if (!pl.escaped && pl.hand.length === 0 && pl.open.length === 0 && pl.closed.length === 0 && s.deck.length === 0) pl.escaped = true;
-        });
-        nextTurn(s, again);
-      }
-
-      function apply(s, idx, action) {
-        const p = s.players[idx];
-        if (!action) { nextTurn(s, false); return; }
-        if (action.type === 'PICKUP_PILE') {
-          pickup(s, p);
-          nextTurn(s, false);
-        } else if (action.type === 'PLAY_BLIND') {
-          const i = p.closed.findIndex(c => c.id === action.cardId);
-          const card = i === -1 ? p.closed[0] : p.closed[i];
-          p.closed.splice(p.closed.indexOf(card), 1);
-          if (RulesEngine.isCardPlayable(s, card)) play(s, p, [card]);
-          else { pickup(s, p, [card]); nextTurn(s, false); }
-        } else {
-          const hs = new Set(action.handIds || []);
-          const os = new Set(action.openIds || []);
-          const cards = [...p.hand.filter(c => hs.has(c.id)), ...p.open.filter(c => os.has(c.id))];
-          if (cards.length === 0) { pickup(s, p); nextTurn(s, false); return; }
-          p.hand = p.hand.filter(c => !hs.has(c.id));
-          p.open = p.open.filter(c => !os.has(c.id));
-          play(s, p, cards);
-        }
-      }
-
-      return { clone, apply };
     })();
 

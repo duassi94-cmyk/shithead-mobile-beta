@@ -11,6 +11,7 @@ window.SimHarness = (() => {
   window.renderGame = () => {};
   window.triggerFlightVisual = () => {};
   window.showReaction = () => {};
+  window.saveHostResume = () => {}; // não grava retomada de partidas simuladas
   let maxTurns = 3000;
   window.setTimeout = (fn, ms, ...a) => {
     if (G && (G.turns || 0) > maxTurns) return 0;

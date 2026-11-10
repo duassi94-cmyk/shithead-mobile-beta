@@ -16,7 +16,7 @@ window.Replay = (() => {
     const set = (obj, key, fn, name) => { saved[name] = [obj, key, obj[key]]; obj[key] = fn; };
     Object.keys(SoundEngine).forEach(k => { if (typeof SoundEngine[k] === 'function') set(SoundEngine, k, () => {}, 'snd_' + k); });
     ['renderGame', 'triggerFlightVisual', 'showReaction', 'broadcastState', 'maybeBotReact', 'scheduleBotIfNeeded',
-      'showInvalidWarning', 'recordMatchResult', 'renderScoreboard', 'keepScreenAwake'].forEach(n => set(window, n, () => {}, n));
+      'showInvalidWarning', 'recordMatchResult', 'renderScoreboard', 'keepScreenAwake', 'saveHostResume'].forEach(n => set(window, n, () => {}, n));
     set(window, 'setTimeout', () => 0, 'setTimeout'); // bots do duelo e início automático: o replay comanda
     const turns = [];
     const checks = [];

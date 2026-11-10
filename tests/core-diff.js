@@ -48,7 +48,7 @@ window.CoreDiff = (() => {
   window.maybeBotReact = (actor, kind, count = 0) => { cap.reacts.push([actor.id, kind || null, count || 0]); };
   window.showInvalidWarning = (msg) => { cap.warnings.push(msg); };
   window.nlog = (ev) => { if (ev === 'seating') cap.seating.push(G.players.map(p => p.id).join(',')); };
-  ['renderGame', 'broadcastState', 'scheduleBotIfNeeded', 'showReaction', 'renderScoreboard', 'keepScreenAwake', 'renderLobbySlots'].forEach(n => { window[n] = () => {}; });
+  ['renderGame', 'broadcastState', 'scheduleBotIfNeeded', 'showReaction', 'renderScoreboard', 'keepScreenAwake', 'renderLobbySlots', 'saveHostResume'].forEach(n => { window[n] = () => {}; });
   window.setTimeout = () => 0; // início automático e toques dos bots no duelo: o teste comanda
 
   // ---- Fotografia da mesa ------------------------------------------------------------

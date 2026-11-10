@@ -501,5 +501,38 @@
         E.push({ type: 'turnAdvanced', fx });
       }
 
-      return { deal, rigTutorialDeck, startIfReady, speedWin, apply };
+      /* ---- Cópia para simulação ---------------------------------------------------
+         A IA "imagina" continuações da partida aplicando jogadas numa cópia da mesa.
+         A cópia não compartilha nada mutável com a mesa real (nem as cartas: recolher
+         o monte marca cartas como públicas). Sem histórico de estagnação: a simulação
+         começa a contar do zero. */
+      function cloneForSim(S) {
+        const cards = (arr) => arr.map(c => ({ ...c }));
+        return {
+          rules: S.rules,
+          deck: cards(S.deck),
+          discard: cards(S.discard),
+          discardPlayGroups: [],
+          burnedCount: S.burnedCount || 0,
+          players: S.players.map(p => ({
+            id: p.id, name: p.name, type: p.type, persona: p.persona, seatNumber: p.seatNumber,
+            readySwap: true, escaped: p.escaped,
+            hand: cards(p.hand), open: cards(p.open), closed: cards(p.closed)
+          })),
+          phase: S.phase,
+          turnIdx: S.turnIdx,
+          direction: S.direction,
+          constraint7: S.constraint7,
+          freePlayAfterJoker: S.freePlayAfterJoker,
+          freePlayAfter2: S.freePlayAfter2,
+          openingVal: S.openingVal == null ? null : S.openingVal,
+          openingLabel: S.openingLabel || null,
+          escapeOrder: (S.escapeOrder || []).slice(),
+          turnCounter: 0,
+          stall: null,
+          mode: 'sim'
+        };
+      }
+
+      return { deal, rigTutorialDeck, startIfReady, speedWin, apply, cloneForSim };
     })();

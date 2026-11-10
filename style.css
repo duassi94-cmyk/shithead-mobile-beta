@@ -391,6 +391,9 @@
       border-radius: 8px;
       padding: 8px 10px;
     }
+    /* Partida interrompida: oferta de retomada no topo do lobby */
+    .resume-box { border: 1px solid rgba(16, 185, 129, 0.7); background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(56, 189, 248, 0.1)); }
+    .resume-text { font-size: 0.82rem; line-height: 1.35; }
     /* Selo BETA / LOCAL ao lado do nome (versões de teste, com salas separadas) */
     .env-badge { font-size: 0.62rem; letter-spacing: 1px; vertical-align: middle; padding: 2px 7px; border-radius: 99px; background: var(--cyan); color: #0f172a; -webkit-text-fill-color: #0f172a; -webkit-background-clip: border-box; background-clip: border-box; }
     .env-badge[hidden] { display: none; }
