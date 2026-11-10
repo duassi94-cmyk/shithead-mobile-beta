@@ -60,7 +60,7 @@ window.CoreDiff = (() => {
     'openingVal', 'openingLabel', 'bannerText', 'tieContext', 'loserName', 'loserId', 'escapeOrder', 'turnCounter',
     'stall', 'lastPickupBy', 'lastPickupCount', 'mode', 'sessionLosses', 'rules'];
   // Campos que só a camada do jogo cuida (relógio, tela, rede)
-  const LAYER_KEYS = new Set(['pickupStamp', 'loserAvatar', 'version', 'turns', 'turbo']);
+  const LAYER_KEYS = new Set(['pickupStamp', 'loserAvatar', 'version', 'turns', 'turbo', 'history']);
   const PLAYER_KEYS = ['id', 'seatNumber', 'name', 'type', 'persona', 'readySwap', 'escaped', 'disconnected'];
   function snap(S) {
     const o = {};

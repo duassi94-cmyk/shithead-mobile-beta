@@ -2290,7 +2290,11 @@
         if (G.phase === 'SPEED_TIE') handleSpeedTieWin(pIdx);
         return;
       }
-      runCoreEvents(Core.apply(G, playerId, action).events, action.fromRect || null);
+      // Histórico público: anotado antes dos eventos (que já transmitem a mesa)
+      const before = PlayHistory.before(G, playerId);
+      const res = Core.apply(G, playerId, action);
+      if (res.ok) PlayHistory.add(G, res.events, before);
+      runCoreEvents(res.events, action.fromRect || null);
     }
 
     /* Tudo o que acontece em volta de uma jogada (tela, som, animação, log, rede, bots)
@@ -3013,6 +3017,7 @@
       renderDrawPile();
       renderBurnedPile();
       renderDiscardPileMessy();
+      refreshHistoryIfOpen();
 
       // Botão ⏩: aparece quando você já escapou (ou na simulação)
       const turboBtn = document.getElementById('btn-turbo');
@@ -3777,11 +3782,33 @@
       });
       document.getElementById('overlay-pane-board').hidden = tab !== 'board';
       document.getElementById('overlay-pane-rules').hidden = tab !== 'rules';
+      document.getElementById('overlay-pane-history').hidden = tab !== 'history';
+      if (tab === 'history') renderHistoryList();
       if (tab === 'rules') {
         document.getElementById('overlay-rules-list').innerHTML = G && G.rules ? rulesListHtml(G.rules) : '<li>Sem partida em andamento.</li>';
       }
     }
     document.querySelectorAll('[data-overlay-tab]').forEach(b => b.addEventListener('click', () => setOverlayTab(b.dataset.overlayTab)));
+
+    /* ---- Jogadas: histórico público da partida (o mais recente em cima) -------------- */
+    function renderHistoryList() {
+      const el = document.getElementById('overlay-history-list');
+      const list = G && Array.isArray(G.history) ? G.history : [];
+      if (!list.length) { el.innerHTML = '<li class="history-empty">Nenhuma jogada ainda.</li>'; return; }
+      const nameOf = (id) => {
+        const p = G.players.find(x => x.id === id);
+        if (!p) return null;
+        return id === myPlayerId && G.mode !== 'sim' ? 'Você' : p.name;
+      };
+      el.innerHTML = list.slice().reverse().map(e =>
+        `<li class="history-item h-${e.k}${e.fx ? ' fx-' + e.fx : ''}"><span class="history-turn">${e.t}</span><span>${esc(PlayHistory.text(e, nameOf))}</span></li>`
+      ).join('');
+    }
+    // Aba aberta durante a partida: acompanha as jogadas novas
+    function refreshHistoryIfOpen() {
+      const ov = document.getElementById('board-overlay');
+      if (ov.classList.contains('show') && !document.getElementById('overlay-pane-history').hidden) renderHistoryList();
+    }
 
     /* ---- Ajustes: instalar no celular, diagnóstico, versão --------------------------- */
     let deferredInstall = null;
@@ -3851,6 +3878,10 @@
     document.getElementById('btn-board-game').addEventListener('click', () => {
       renderBoardOverlay();
       setOverlayTab('board');
+      document.getElementById('board-overlay').classList.add('show');
+    });
+    document.getElementById('btn-history-game').addEventListener('click', () => {
+      setOverlayTab('history');
       document.getElementById('board-overlay').classList.add('show');
     });
     document.getElementById('btn-rules-game').addEventListener('click', () => {

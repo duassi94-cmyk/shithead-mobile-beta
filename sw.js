@@ -9,7 +9,7 @@
 const ENV = /-beta\//.test(self.location.pathname) ? 'beta'
   : (['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname) ? 'local' : 'prod');
 const CACHE_PREFIX = 'shithead-' + ENV + '-';
-const CACHE_NAME = CACHE_PREFIX + 'b17';
+const CACHE_NAME = CACHE_PREFIX + 'b18';
 // Caches de versões antigas (antes do prefixo por ambiente) pertencem ao jogo oficial
 const LEGACY_PREFIX = 'shithead-mobile-v5';
 const ASSETS = [
@@ -26,6 +26,7 @@ const ASSETS = [
   './js/nucleo/sorteio.js',
   './js/nucleo/regras.js',
   './js/nucleo/motor.js',
+  './js/nucleo/historico.js',
   './js/bots/ia.js',
   './js/rede/sanitizar.js',
   './game.js',

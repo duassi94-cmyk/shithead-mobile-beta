@@ -74,6 +74,36 @@ function sanitizeSlot(s) {
   return { id, name: sanitizeName(s.name), type, persona, avatar: sanitizeAvatar(s.avatar, type, persona) };
 }
 
+// Histórico de jogadas (js/nucleo/historico.js): só tipos, efeitos e cartas conhecidos,
+// jogadores que estão na mesa e números pequenos. O texto é montado aqui, nunca vem da rede.
+const HIST_KINDS = ['play', 'pickup', 'blindFail', 'out', 'end'];
+const HIST_SRC = ['hand', 'table', 'mixed', 'blind'];
+const HIST_FX = ['', 'burn', 'reverse', 'seven', 'two', 'joker'];
+function sanitizeCardLabel(l) {
+  if (l === 'JOKER★') return l;
+  const m = typeof l === 'string' && /^(10|[2-9JQKA])(.)$/u.exec(l);
+  return m && RANK_BY_LABEL[m[1]] && AppConfig.SUITS.includes(m[2]) ? l : null;
+}
+function sanitizeHistory(arr, ids) {
+  if (!Array.isArray(arr)) return [];
+  const int = (v, max) => Math.min(max, Math.max(0, Math.floor(Number(v) || 0)));
+  return arr.slice(-30).map(e => {
+    if (!e || typeof e !== 'object' || !HIST_KINDS.includes(e.k) || !ids.includes(e.p)) return null;
+    const out = { t: int(e.t, 99999), k: e.k, p: e.p };
+    if (e.k === 'play' || e.k === 'blindFail') {
+      out.cards = (Array.isArray(e.cards) ? e.cards.slice(0, 8) : []).map(sanitizeCardLabel).filter(Boolean);
+      if (!out.cards.length) return null;
+    }
+    if (e.k === 'play') {
+      out.src = HIST_SRC.includes(e.src) ? e.src : 'hand';
+      out.fx = HIST_FX.includes(e.fx) ? e.fx : '';
+    }
+    if (e.k === 'pickup' || e.k === 'blindFail') out.n = int(e.n, 250);
+    if (e.k === 'out') out.n = int(e.n, 6);
+    return out;
+  }).filter(Boolean);
+}
+
 // Estado da mesa recebido do host: reconstruído campo a campo
 function sanitizeState(st) {
   if (!st || typeof st !== 'object' || !Array.isArray(st.players)) return null;
@@ -140,6 +170,7 @@ function sanitizeState(st) {
     openingLabel: st.openingVal != null && RANK_BY_LABEL[st.openingLabel] ? st.openingLabel : (st.openingVal === 16 ? 'Coringa' : null),
     lastPickupCount: Math.min(250, Math.max(0, num(st.lastPickupCount))),
     turbo: !!st.turbo,
+    history: sanitizeHistory(st.history, ids),
     stall: null
   };
 }
@@ -208,4 +239,4 @@ function normalizeRoomCode(raw) {
   return String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, ROOM_CODE_LEN + 2);
 }
 
-export { esc, sanitizeName, sanitizeAvatar, sanitizeId, PERSONAS_OK, RANK_BY_LABEL, CARD_ID_RE, PLACEHOLDER_ID_RE, sanitizeCard, sanitizeCards, sanitizeSlot, sanitizeState, sanitizeRules, defaultBigPile, sanitizeBigPile, sanitizeRecord, REACTIONS_OK, ROOM_ALPHABET, ROOM_CODE_LEN, ROOM_CODE_RE, ROOM_CODE_ANY_RE, newRoomCode, normalizeRoomCode };
+export { esc, sanitizeName, sanitizeAvatar, sanitizeId, PERSONAS_OK, RANK_BY_LABEL, CARD_ID_RE, PLACEHOLDER_ID_RE, sanitizeCard, sanitizeCards, sanitizeSlot, sanitizeState, sanitizeHistory, sanitizeRules, defaultBigPile, sanitizeBigPile, sanitizeRecord, REACTIONS_OK, ROOM_ALPHABET, ROOM_CODE_LEN, ROOM_CODE_RE, ROOM_CODE_ANY_RE, newRoomCode, normalizeRoomCode };

@@ -1874,3 +1874,26 @@
     .card-power { font-size: max(var(--fs-min), calc(var(--card-w) * 0.2)); }
     /* celular estreito: quem joga já fica destacado em amarelo; o " · VEZ" sai para a faixa caber */
     @media (max-width: 340px) { .seq-tag { display: none; } }
+
+    /* Jogadas (histórico público da partida) */
+    .history-list { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+    .history-item {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.05);
+      font-size: var(--fs-md);
+      line-height: 1.35;
+      color: var(--text);
+    }
+    .history-turn { flex: 0 0 2.2em; text-align: right; font-size: var(--fs-min); font-weight: 800; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .history-item.h-pickup, .history-item.h-blindFail { background: rgba(239, 68, 68, 0.14); }
+    .history-item.fx-burn { background: rgba(249, 115, 22, 0.16); }
+    .history-item.h-out { background: rgba(16, 185, 129, 0.14); }
+    .history-item.h-end { background: rgba(245, 158, 11, 0.2); font-weight: 800; }
+    .history-empty { color: var(--text-dim); font-size: var(--fs-md); padding: 8px 2px; }
+    #board-overlay .board-tab { min-height: var(--tap); font-size: var(--fs-md); padding: 0 12px; }
+    #board-overlay .board-tabs { min-width: 0; }
+    #board-overlay #btn-board-close { min-height: var(--tap); font-size: var(--fs-md); }

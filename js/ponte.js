@@ -7,7 +7,8 @@
      config.js            AppConfig (versão, build, ambiente, cartas, bots)
      servicos/            armazenamento (Store, LogDB), avatar, log de partidas,
                           log de conexão (+ captura de erros), som
-     nucleo/              sorteio (semente, impressão digital), regras, motor (Core)
+     nucleo/              sorteio (semente, impressão digital), regras, motor (Core),
+                          histórico público de jogadas (PlayHistory)
      bots/ia.js           IA dos bots
      rede/sanitizar.js    limpeza de tudo que chega da rede, código da sala
    O game.js (tela, rede, fluxo da partida) ainda é um script clássico que usa esses
@@ -24,12 +25,14 @@ import { SoundEngine } from './servicos/som.js';
 import { Rng, stateDigest } from './nucleo/sorteio.js';
 import { RulesEngine } from './nucleo/regras.js';
 import { Core } from './nucleo/motor.js';
+import { HISTORY_MAX, historyBefore, addHistory, historyText } from './nucleo/historico.js';
 import { AIEngine } from './bots/ia.js';
 import * as Sanitizar from './rede/sanitizar.js';
 
 Object.assign(window, {
   AppConfig, Store, LogDB, AvatarModule, NetLog, LoggerModule, SoundEngine,
-  Rng, stateDigest, RulesEngine, Core, AIEngine
+  Rng, stateDigest, RulesEngine, Core, AIEngine,
+  PlayHistory: { MAX: HISTORY_MAX, before: historyBefore, add: addHistory, text: historyText }
 }, Sanitizar);
 
 // Registro do Service Worker (modo offline e atualização dos arquivos)
