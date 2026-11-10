@@ -12,7 +12,7 @@ continuam funcionando do mesmo jeito.
 | Arquivo | Para que serve |
 |---|---|
 | `sim-harness.js` | Roda partidas só entre bots, sem tela e sem som, e confere se nenhuma carta some ou duplica. Use numa aba do jogo (não na que você usa para jogar). |
-| `layout-test.js` | Confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela: `await __run()` (mesa, incluindo texto ≥ 11 px e botões ≥ 44 px, com o menu ⋯ aberto) e `await __lobby()` (telas de entrada: Início, Convite, Sala, Placar, Ajustes; inclui alvos de toque ≥ 44 px). Desliga a gravação no armazenamento do navegador da aba. |
+| `layout-test.js` | Confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela: `await __run()` (mesa, incluindo texto ≥ 11 px e botões ≥ 44 px, com o menu ⋯ aberto; com o celular deitado — a partir de 640 px de largura — confere a coluna da mão ao lado do feltro) e `await __lobby()` (telas de entrada: Início, Convite, Sala, Placar, Ajustes; inclui alvos de toque ≥ 44 px). Desliga a gravação no armazenamento do navegador da aba. |
 | `make-icons.py` | Gera os ícones PNG do app (`icons/`) sem bibliotecas externas: `py tests/make-icons.py`. O mesmo desenho está em `icons/icon.svg`. |
 | `security-check.js` | Age como um aparelho estranho contra uma sala aberta: versão antiga, mensagem sem entrar, id inválido e excesso de mensagens. |
 | `replay.js` | Reproduz uma partida a partir do log (semente + ações) e confere a distribuição, as impressões digitais da mesa, cada jogada e o final. |

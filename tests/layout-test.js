@@ -73,11 +73,17 @@
     if (!z.classList.contains('hand-open')) out.push('mão não abriu na vez');
     const L = R(document.getElementById('hand-layer')), S = R(document.getElementById('my-hand-cards'));
     inV(document.getElementById('hand-layer'), 'mão ampliada');
-    piles.forEach((p, j) => { if (p.bottom > L.top + 2) out.push('mão ampliada cobre pilha ' + j); });
+    // Retrato: a mão abre por cima da parte de baixo da mesa e não pode cobrir as pilhas.
+    // Deitado: a mão fica numa coluna ao lado da mesa e não pode encostar no feltro.
+    if (LANDSCAPE_MQ.matches) { if (ov(L, felt, 1)) out.push('coluna da mão encosta no feltro'); }
+    else piles.forEach((p, j) => { if (p.bottom > L.top + 2) out.push('mão ampliada cobre pilha ' + j); });
     if (!fits(document.querySelector('.hand-layer-head'))) out.push('cabeçalho da mão não cabe');
     if (document.getElementById('btn-select-same').hidden) out.push('+ iguais não apareceu');
     const cards = [...document.querySelectorAll('#my-hand-cards .playing-card')];
-    if (cards.some(c => { const r = R(c); return r.top < S.top - 0.5 || r.bottom > S.bottom + 0.5; })) out.push('cartas passam da altura da mão');
+    // Retrato: uma linha que rola na horizontal (nenhuma carta passa da altura da mão).
+    // Deitado: linhas que rolam na vertical (nenhuma carta passa da largura da coluna).
+    if (LANDSCAPE_MQ.matches) { if (cards.some(c => { const r = R(c); return r.left < S.left - 0.5 || r.right > S.right + 0.5; })) out.push('cartas passam da largura da mão'); }
+    else if (cards.some(c => { const r = R(c); return r.top < S.top - 0.5 || r.bottom > S.bottom + 0.5; })) out.push('cartas passam da altura da mão');
     const lt = document.getElementById('layer-table-slot'); [...lt.querySelectorAll('.playing-card')].forEach(c => { if (!inside(R(c), L)) out.push('carta da mesa cortada na camada'); });
     // mão recolhida
     setHandOpen(false);
@@ -91,7 +97,8 @@
     // Tamanhos mínimos (Passo 5): texto visível ≥ 11 px e botões ≥ 44×44 px na mesa
     out.push(...__sizes());
     const compact = document.getElementById('opponents-area').classList.contains('seats-compact');
-    return vw + 'x' + vh + ' ' + G.players.length + 'j' + (G.rules.decks === 2 ? ' 2bar' : '') + (compact ? ' (compacto)' : '') + ': ' + (out.length ? [...new Set(out)].join('; ') : 'OK');
+    const land = LANDSCAPE_MQ.matches ? ' deitado' : '';
+    return vw + 'x' + vh + ' ' + G.players.length + 'j' + (G.rules.decks === 2 ? ' 2bar' : '') + (compact ? ' (compacto)' : '') + land + ': ' + (out.length ? [...new Set(out)].join('; ') : 'OK');
   };
 
   // Texto ≥ 11 px e alvos de toque ≥ 44 px em tudo o que está visível na mesa (menu ⋯ aberto incluso).

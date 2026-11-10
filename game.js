@@ -2625,7 +2625,9 @@
 
           // Na mão, gesto horizontal é rolagem (o navegador assume e dispara pointercancel)
           if (!isDragging && Math.hypot(dx, dy) > 8) {
-            if (sourceType === 'hand' && e.pointerType !== 'mouse' && Math.abs(dx) > Math.abs(dy)) return;
+            // (deitado a mão rola na vertical: aí o gesto vertical é a rolagem e o horizontal arrasta)
+            if (sourceType === 'hand' && e.pointerType !== 'mouse' &&
+              (LANDSCAPE_MQ.matches ? Math.abs(dy) > Math.abs(dx) : Math.abs(dx) > Math.abs(dy))) return;
             isDragging = true;
             SoundEngine.select();
             domEl.classList.add('dragging-source');
@@ -3057,9 +3059,13 @@
     }
 
     // Cartas da mesa: no feltro com a mão recolhida; dentro da camada com a mão ampliada
+    // Celular deitado (mesma condição do style.css): a mão fica sempre aberta numa coluna
+    // ao lado da mesa, e suas cartas da mesa ficam nela (não no feltro)
+    const LANDSCAPE_MQ = window.matchMedia('(orientation: landscape) and (max-height: 520px) and (min-width: 640px)');
+    LANDSCAPE_MQ.addEventListener?.('change', () => { if (G) renderGame(); });
     function placeTableCards() {
       const el = document.getElementById('my-table-cards');
-      const target = document.getElementById(handOpen ? 'layer-table-slot' : 'my-table-slot');
+      const target = document.getElementById(handOpen || LANDSCAPE_MQ.matches ? 'layer-table-slot' : 'my-table-slot');
       if (el && target && el.parentElement !== target) target.appendChild(el);
     }
 
@@ -3197,7 +3203,7 @@
       }));
       // Sobrepõe as cartas quando não cabem todas lado a lado
       const cw = parseFloat(getComputedStyle(myHandEl).getPropertyValue('--card-w')) || 58;
-      myHandEl.classList.toggle('hand-dense', sortedHand.length * (cw + 6) > myHandEl.clientWidth - 16);
+      myHandEl.classList.toggle('hand-dense', !LANDSCAPE_MQ.matches && sortedHand.length * (cw + 6) > myHandEl.clientWidth - 16);
 
       // Mão recolhida no canto (leque pequeno) + abertura automática na sua vez
       renderHandDock(me, sortedHand, hideHand, isMyTurn);
@@ -3226,7 +3232,7 @@
       const btnPickup = document.getElementById('btn-pickup-pile');
       const actionBar = btnReady.parentElement;
       actionBar.style.display = (spectator && !showBig) ? 'none' : 'flex';
-      document.getElementById('reaction-bar').style.display = (spectator || G.mode === 'tutorial') ? 'none' : 'flex';
+      document.getElementById('reaction-bar').style.display = (spectator || G.mode === 'tutorial') ? 'none' : ''; // '' = o do CSS (coluna ou grade deitado)
 
       if (G.phase === 'SWAP') {
         document.getElementById('btn-select-same').hidden = true;
@@ -4023,6 +4029,21 @@
       sample.push({ key: 'pvback', card: null });
       Mesa.pile(document.getElementById('look-preview'), sample, []);
     }
+    // Menu ⋯ da mesa: lado da mão (mesma opção de Ajustes → Aparência); o menu fica aberto
+    function renderHandSideItem() {
+      const left = Aparencia.get().hand === 'left';
+      const b = document.getElementById('btn-hand-side');
+      b.setAttribute('aria-pressed', String(left));
+      b.querySelector('span').textContent = left ? 'Mão à esquerda: ligado' : 'Mão à esquerda: desligado';
+    }
+    document.getElementById('btn-hand-side').addEventListener('click', () => {
+      Aparencia.set('hand', Aparencia.get().hand === 'left' ? 'right' : 'left');
+      SoundEngine.select();
+      renderHandSideItem();
+      if (G) renderGame();
+    });
+    renderHandSideItem();
+
     document.getElementById('box-look').addEventListener('click', (e) => {
       const b = e.target.closest('[data-look]');
       if (!b) return;
@@ -4030,6 +4051,7 @@
       SoundEngine.select();
       renderLookBox();
       if (b.dataset.look === 'panel') syncBoardDock();
+      if (b.dataset.look === 'hand') renderHandSideItem();
     });
 
     function renderSettingsView() {
@@ -4078,7 +4100,7 @@
     gameMenuBtn.addEventListener('click', () => setGameMenu(gameMenu.hidden));
     gameMenu.addEventListener('click', (e) => {
       // o som fica aberto para ver o novo estado; o resto fecha
-      if (e.target.closest('.menu-item') && !e.target.closest('#btn-mute-game')) setGameMenu(false);
+      if (e.target.closest('.menu-item') && !e.target.closest('#btn-mute-game, #btn-hand-side')) setGameMenu(false);
     });
     document.addEventListener('pointerdown', (e) => {
       if (!gameMenu.hidden && !gameMenu.contains(e.target) && !gameMenuBtn.contains(e.target)) setGameMenu(false);
