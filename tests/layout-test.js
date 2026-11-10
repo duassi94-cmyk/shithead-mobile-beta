@@ -84,8 +84,34 @@
     piles.forEach((p, j) => { if (ov(slot, p, 2)) out.push('cartas da mesa encostam na pilha ' + j); });
     if (ov(slot, R(document.getElementById('status-banner')), 2)) out.push('cartas da mesa encostam na faixa');
     setHandOpen(true);
+    // Tamanhos mínimos (Passo 5): texto visível ≥ 11 px e botões ≥ 44×44 px na mesa
+    out.push(...__sizes());
     const compact = document.getElementById('opponents-area').classList.contains('seats-compact');
     return vw + 'x' + vh + ' ' + G.players.length + 'j' + (G.rules.decks === 2 ? ' 2bar' : '') + (compact ? ' (compacto)' : '') + ': ' + (out.length ? [...new Set(out)].join('; ') : 'OK');
+  };
+
+  // Texto ≥ 11 px e alvos de toque ≥ 44 px em tudo o que está visível na mesa (menu ⋯ aberto incluso).
+  // Usa o tamanho de layout (offsetWidth/Height), que não muda durante animações de escala.
+  window.__sizes = () => {
+    const out = [], scr = document.getElementById('screen-game');
+    const menuBtn = document.getElementById('btn-game-menu'), menu = document.getElementById('game-menu');
+    const wasOpen = !menu.hidden; if (!wasOpen) menuBtn.click();
+    const vw = innerWidth, vh = innerHeight;
+    menu.querySelectorAll('.menu-item').forEach(b => { if (!b.offsetWidth) return; const r = R(b); if (r.left < -0.5 || r.right > vw + 0.5 || r.bottom > vh + 0.5) out.push('menu ⋯ fora da tela'); });
+    const tw = document.createTreeWalker(scr, NodeFilter.SHOW_TEXT); let n;
+    while ((n = tw.nextNode())) {
+      if (!n.textContent.trim()) continue;
+      const e = n.parentElement; if (!e.getClientRects().length || getComputedStyle(e).visibility === 'hidden') continue;
+      const fs = parseFloat(getComputedStyle(e).fontSize);
+      if (fs < 10.95) out.push('texto ' + (e.id || e.className || e.tagName.toLowerCase()) + ' com ' + fs.toFixed(1) + 'px');
+    }
+    scr.querySelectorAll('button, .hand-dock').forEach(b => {
+      if (!b.offsetWidth || getComputedStyle(b).visibility === 'hidden') return;
+      if (b.offsetWidth < 44 || b.offsetHeight < 44) out.push((b.id || b.className.split(' ')[0]) + ' com ' + b.offsetWidth + '×' + b.offsetHeight + 'px');
+    });
+    if (!wasOpen) menuBtn.click();
+    if (!menu.hidden) out.push('menu ⋯ não fecha');
+    return out;
   };
 
   window.__run = async () => {

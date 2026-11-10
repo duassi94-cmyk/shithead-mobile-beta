@@ -12,6 +12,12 @@
       --card-w: 58px;
       --card-h: 84px;
       --radius: 12px;
+      /* Tamanhos mínimos (Passo 5): texto que se lê nunca abaixo de 11 px,
+         o que se lê durante a jogada com 13 px, alvo de toque com 44 px */
+      --fs-min: 11px;
+      --fs-sm: 12px;
+      --fs-md: 13px;
+      --tap: 44px;
     }
 
     @media (min-width: 768px) {
@@ -1773,3 +1779,98 @@
       .seq-node { font-size: 0.62rem; gap: 3px; }
       .seq-node img { width: 18px; height: 18px; }
     }
+
+    /* ===== Mesa: tamanhos mínimos (texto ≥ 11 px, toque ≥ 44 px) e menu ⋯ ===== */
+    .top-bar { position: relative; min-height: var(--tap); padding: 0; }
+    .rule-chip { font-size: var(--fs-min); }
+    .top-btn {
+      min-width: var(--tap);
+      height: var(--tap);
+      padding: 0 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: var(--surface-light);
+      color: var(--text);
+      font-size: var(--fs-md);
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .top-btn:active { transform: scale(0.94); }
+    .top-menu-btn { padding: 0; font-size: 1.4rem; line-height: 1; }
+    .top-menu-btn[aria-expanded="true"] { background: var(--accent); color: #0f172a; }
+    .top-menu-btn.has-news::after {
+      content: '';
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 0 2px var(--bg-dark);
+    }
+    .game-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 60;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+      padding: 6px;
+      gap: 2px;
+      border-radius: 14px;
+      background: rgb(15, 23, 42);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+    }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: var(--tap);
+      padding: 0 12px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+    .menu-item .ico { width: 20px; height: 20px; flex-shrink: 0; }
+    .menu-item:hover, .menu-item:focus-visible { background: var(--surface-light); outline: none; }
+    #btn-turbo { color: #bae6fd; }
+
+    .pile-label, .discard-play-tag, .seat-name, .seat-hand-pill, .skull-badge,
+    .dock-label .dock-turn, .dock-label .dock-sub { font-size: var(--fs-min); }
+    @media (max-height: 700px) { .status-banner { font-size: var(--fs-min); } }
+    .seq-node { font-size: var(--fs-min); }
+    @media (max-width: 360px) { .seq-arrow { font-size: var(--fs-min); } }
+    .seat-status { font-size: var(--fs-min); height: 13px; line-height: 13px; }
+    .discard-play-tag { top: -12px; }
+    .discard-stack .discard-play-tag { top: -11px; }
+    .mini-slot, .seats-compact .mini-slot, .seats-tight .mini-slot { font-size: var(--fs-min); letter-spacing: -0.5px; }
+    .seats-compact .seat-name, .seats-compact .seat-hand-pill { font-size: var(--fs-min); }
+    .seats-compact .mini-slot { width: 18px; height: 24px; }
+    .seats-tight .mini-slot { width: 17px; height: 23px; }
+
+    .reaction-bar { flex-basis: var(--tap); width: var(--tap); }
+    .reaction-bar .react-btn { width: var(--tap); min-height: var(--tap); }
+    .action-bar { min-height: var(--tap); }
+    .action-bar .btn { min-height: var(--tap); font-size: var(--fs-md); }
+    .hand-layer-head { font-size: var(--fs-sm); }
+    .hand-layer-head .btn { min-height: var(--tap); font-size: var(--fs-md); padding: 0 12px; }
+    .card-corner .suit { font-size: max(var(--fs-min), calc(var(--card-w) * 0.22)); }
+    .dock-card { font-size: var(--fs-sm); }
+    .dock-card i { font-size: var(--fs-min); }
+    .dock-fan.two-rows .dock-card { font-size: var(--fs-min); padding-top: 1px; }
+    .dock-fan.two-rows .dock-card i { font-size: var(--fs-min); margin-top: 0; }
+    .card-power { font-size: max(var(--fs-min), calc(var(--card-w) * 0.2)); }
+    /* celular estreito: quem joga já fica destacado em amarelo; o " · VEZ" sai para a faixa caber */
+    @media (max-width: 340px) { .seq-tag { display: none; } }

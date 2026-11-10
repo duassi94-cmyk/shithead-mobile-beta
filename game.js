@@ -2731,12 +2731,13 @@
         node.className = 'seq-node' + (isCurrent ? ' seq-active' : '') + (isNext ? ' seq-next' : '') + (p.escaped ? ' seq-escaped' : '') + (compact ? ' seq-compact' : '');
         node.title = p.name + (isCurrent ? ' — vez' : (isNext ? ' — próximo' : ''));
         const avatarSrc = p.avatar || AvatarModule.getDefaultAvatar(p.type, p.persona);
-        const tag = isCurrent ? ' · VEZ' : '';
+        const tag = isCurrent ? '<span class="seq-tag"> · VEZ</span>' : '';
         node.innerHTML = `<img src="${esc(avatarSrc)}" alt="" /><span>${idx === meIdx && G.mode !== 'sim' ? 'Você' : esc(p.name.split(' ')[0])}${tag}</span>`;
         seqBar.appendChild(node);
         if (k < n - 1) {
           const arrow = document.createElement('span');
           arrow.className = 'seq-arrow';
+          arrow.setAttribute('aria-hidden', 'true');
           arrow.textContent = '›';
           seqBar.appendChild(arrow);
         }
@@ -3018,7 +3019,9 @@
       // ⏩ liberado na simulação ou quando todos que ainda têm cartas são bots (host ou convidado)
       const turboOn = turboMode || !!G.turbo;
       const canTurbo = G.phase === 'PLAY' && !turboOn && ((G.mode === 'sim' && isHost) || onlyBotsLeft());
-      turboBtn.style.display = canTurbo ? 'inline-block' : 'none';
+      turboBtn.hidden = !canTurbo;
+      // pontinho no ⋯ avisa que há algo novo lá dentro (acelerar)
+      document.getElementById('btn-game-menu').classList.toggle('has-news', canTurbo);
       const bigTurbo = document.getElementById('btn-turbo-big');
       const showBig = canTurbo && G.mode !== 'sim';
       bigTurbo.style.display = showBig ? 'block' : 'none';
@@ -3850,6 +3853,30 @@
       setOverlayTab('board');
       document.getElementById('board-overlay').classList.add('show');
     });
+    document.getElementById('btn-rules-game').addEventListener('click', () => {
+      setOverlayTab('rules');
+      document.getElementById('board-overlay').classList.add('show');
+    });
+    // Menu ⋯ da mesa: abre embaixo do botão; fecha ao escolher um item, ao tocar fora ou com Esc
+    const gameMenu = document.getElementById('game-menu');
+    const gameMenuBtn = document.getElementById('btn-game-menu');
+    function setGameMenu(open) {
+      gameMenu.hidden = !open;
+      gameMenuBtn.setAttribute('aria-expanded', String(open));
+      if (open) gameMenu.querySelector('.menu-item:not([hidden])')?.focus({ preventScroll: true });
+    }
+    gameMenuBtn.addEventListener('click', () => setGameMenu(gameMenu.hidden));
+    gameMenu.addEventListener('click', (e) => {
+      // o som fica aberto para ver o novo estado; o resto fecha
+      if (e.target.closest('.menu-item') && !e.target.closest('#btn-mute-game')) setGameMenu(false);
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!gameMenu.hidden && !gameMenu.contains(e.target) && !gameMenuBtn.contains(e.target)) setGameMenu(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !gameMenu.hidden) { setGameMenu(false); gameMenuBtn.focus(); }
+    });
+    document.getElementById('btn-leave').addEventListener('click', () => setGameMenu(false));
     const closeBoardOverlay = () => document.getElementById('board-overlay').classList.remove('show');
     document.getElementById('btn-board-close').addEventListener('click', closeBoardOverlay);
     document.getElementById('board-overlay').addEventListener('click', (e) => { if (e.target.id === 'board-overlay') closeBoardOverlay(); });

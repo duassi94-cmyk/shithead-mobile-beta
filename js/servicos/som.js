@@ -37,7 +37,8 @@ const SoundEngine = (() => {
     const icon = `<svg class="ico"><use href="#i-${muted ? 'mute' : 'sound'}"/></svg>`;
     [lobbyBtn, gameBtn].forEach(btn => {
       if (!btn) return;
-      btn.innerHTML = icon;
+      // No menu ⋯ da mesa o item também diz o estado por escrito
+      btn.innerHTML = icon + (btn.classList.contains('menu-item') ? `<span>${muted ? 'Som desligado' : 'Som ligado'}</span>` : '');
       btn.setAttribute('aria-label', muted ? 'Som desligado (toque para ligar)' : 'Som ligado (toque para desligar)');
       btn.setAttribute('aria-pressed', String(muted));
       btn.title = muted ? 'Som desligado' : 'Som ligado';

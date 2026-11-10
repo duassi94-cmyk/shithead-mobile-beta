@@ -395,10 +395,15 @@
         <div id="lbl-direction" class="dir-chip" title="Sentido do jogo">↻ Horário</div>
         <div id="lbl-Constraint" class="rule-chip">Monte Livre</div>
         <div class="top-actions">
-          <button id="btn-turbo" class="btn btn-secondary btn-xs" style="display:none;" title="Acelerar até o fim" aria-label="Acelerar até o fim"><svg class="ico"><use href="#i-fast"/></svg></button>
-          <button id="btn-board-game" class="btn btn-secondary btn-xs" title="Placar e regras desta mesa" aria-label="Placar e regras desta mesa"><svg class="ico"><use href="#i-trophy"/></svg></button>
-          <button id="btn-mute-game" class="btn btn-secondary btn-xs" title="Som" aria-label="Som"><svg class="ico"><use href="#i-sound"/></svg></button>
-          <button id="btn-leave" class="btn btn-secondary btn-xs">Sair</button>
+          <button id="btn-game-menu" class="top-btn top-menu-btn" type="button" aria-label="Mais opções" aria-expanded="false" aria-controls="game-menu" title="Mais opções"><span aria-hidden="true">⋯</span></button>
+          <button id="btn-leave" class="top-btn" type="button">Sair</button>
+        </div>
+        <!-- Menu ⋯ da mesa: o que não precisa ficar à vista durante a jogada -->
+        <div id="game-menu" class="game-menu" hidden>
+          <button id="btn-turbo" class="menu-item" type="button" hidden><svg class="ico"><use href="#i-fast"/></svg><span>Acelerar até o fim</span></button>
+          <button id="btn-board-game" class="menu-item" type="button"><svg class="ico"><use href="#i-trophy"/></svg><span>Placar</span></button>
+          <button id="btn-rules-game" class="menu-item" type="button"><svg class="ico"><use href="#i-book"/></svg><span>Regras desta mesa</span></button>
+          <button id="btn-mute-game" class="menu-item" type="button"><svg class="ico"><use href="#i-sound"/></svg><span>Som</span></button>
         </div>
       </div>
 
