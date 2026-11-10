@@ -7,6 +7,7 @@
 //   SimHarness.out / SimHarness.viol -> resultados / violações (cartas perdidas ou duplicadas)
 window.SimHarness = (() => {
   Object.keys(SoundEngine).forEach(k => { if (typeof SoundEngine[k] === 'function') SoundEngine[k] = () => {}; });
+  if (typeof LogDB !== 'undefined') LogDB.off(); // não grava logs desta aba
   ['initNewSession', 'startMatchLog', 'logSwap', 'logTurn', 'logAction', 'logCheck', 'logMatchEnd', 'setMatchMode'].forEach(k => { LoggerModule[k] = () => {}; });
   window.renderGame = () => {};
   window.triggerFlightVisual = () => {};

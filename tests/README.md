@@ -47,6 +47,17 @@ await Replay.all(logExportado);      // todas as partidas do log
 `ok: true` = a partida reproduzida bateu em tudo. Partidas interrompidas no meio
 aparecem com "o log não tem o final", mas as conferências até ali continuam valendo.
 
+## Onde o log fica
+
+Desde a build 2026-11-10.7 os logs (partidas e conexão) ficam no IndexedDB do navegador
+(banco `shithead-logs`): uma chave por partida, gravada em segundo plano. O log antigo do
+localStorage é migrado na primeira abertura. Se o navegador recusar o IndexedDB (modo
+privado), o jogo volta a gravar no localStorage. Para testar essa reserva:
+`localStorage.sh_debug_noidb = '1'` e recarregue (apague a chave depois).
+
+`sim-harness.js` e `core-diff.js` desligam a gravação dos logs na aba (`LogDB.off()`).
+`Replay.fromSaved()` espera o log carregar do banco.
+
 ## Retomada do host
 
 O host grava a partida em andamento (`sh_host_resume`, 30 min). Para testar à mão:

@@ -56,6 +56,67 @@
 
       return { get, set, remove };
     })();
+
+    /* ==========================================================================
+       0b. BANCO DOS LOGS (LogDB): IndexedDB
+       Os logs (partidas e conexão) crescem a cada jogada. No IndexedDB a gravação roda
+       em segundo plano, sem travar a tela, e o espaço é muito maior que os ~5 MB do
+       localStorage (dividido com foto, nome, placar...). Se o navegador recusar o
+       IndexedDB (modo privado de alguns navegadores), cada log volta a gravar no
+       localStorage, como antes.
+       Uma tabela só ("kv"): chave → valor.
+       ========================================================================== */
+    const LogDB = (() => {
+      const NAME = 'shithead-logs';
+      let dbp = null;
+      let off = false; // ferramentas de teste desligam a gravação (LogDB.off())
+
+      function open() {
+        if (!dbp) {
+          dbp = new Promise((resolve, reject) => {
+            try {
+              if (!window.indexedDB) throw new Error('sem IndexedDB');
+              // Teste da reserva: localStorage.sh_debug_noidb = '1' faz o jogo agir como num
+              // navegador que recusa o IndexedDB
+              if (Store.get('sh_debug_noidb') === '1') throw new Error('IndexedDB desligado (teste)');
+              const rq = indexedDB.open(NAME, 1);
+              rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+              rq.onsuccess = () => {
+                const db = rq.result;
+                db.onversionchange = () => db.close();
+                resolve(db);
+              };
+              rq.onerror = () => reject(rq.error || new Error('IndexedDB recusado'));
+              rq.onblocked = () => reject(new Error('IndexedDB bloqueado'));
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }
+        return dbp;
+      }
+
+      function tx(mode, fn) {
+        return open().then(db => new Promise((resolve, reject) => {
+          let t;
+          try { t = db.transaction('kv', mode); } catch (e) { reject(e); return; }
+          const out = fn(t.objectStore('kv'));
+          t.oncomplete = () => resolve(out);
+          t.onerror = () => reject(t.error || new Error('erro na gravação'));
+          t.onabort = () => reject(t.error || new Error('gravação cancelada'));
+        }));
+      }
+
+      const getMany = (keys) => tx('readonly', st => keys.map(k => st.get(k))).then(rqs => rqs.map(r => r.result));
+      // Grava e apaga numa transação só: ou tudo entra, ou nada
+      const write = (puts = [], dels = []) => (off ? Promise.resolve() : tx('readwrite', st => {
+        puts.forEach(([k, v]) => st.put(v, k));
+        dels.forEach(k => st.delete(k));
+      }));
+
+      return { getMany, write, off: () => { off = true; } };
+    })();
+
     // Registro do Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -70,7 +131,7 @@
       VERSION: 'shithead-mobile-v5',
       // Build publicado: data + número da publicação do dia. Atualizar a cada publicação
       // no GitHub para os logs dizerem exatamente qual código estava rodando.
-      BUILD: '2026-11-10.6',
+      BUILD: '2026-11-10.7',
       // Versão do formato das mensagens entre aparelhos. Mudou o formato? Some 1:
       // o host pede para quem estiver com a versão antiga atualizar a página.
       PROTOCOL: 2,
@@ -215,8 +276,22 @@
        3. MÓDULO DE LOG DE SESSÃO PARA AJUSTE DE IA (LoggerModule)
        ========================================================================== */
     const LoggerModule = (() => {
-      const STORAGE_KEY = 'sh_last_session_log';
+      // Gravação: IndexedDB (LogDB) com uma chave para o cabeçalho da sessão e uma por
+      // partida — a cada jogada só a partida atual é regravada, em segundo plano.
+      // Leitura: a sessão fica na memória (sessionData); "Copiar" e "Baixar" leem dela na
+      // hora (o Safari só copia se for no próprio toque, sem espera).
+      // Reserva: sem IndexedDB, grava a sessão inteira no localStorage, como antes.
+      const STORAGE_KEY = 'sh_last_session_log'; // localStorage (reserva e formato antigo)
+      const PENDING_KEY = 'sh_log_pending';      // partida em andamento, salva às pressas ao fechar a página
+      const HEADER_KEY = 'log:session';
+      const MAX_MATCHES = 30;                    // partidas mantidas por sessão (as mais antigas saem)
+      const matchKey = (m) => 'log:m' + m.matchNumber;
       let sessionData = null;
+      let useIdb = true;
+      let storedMatchKeys = [];  // partidas que estão no IndexedDB (para apagar as que saíram)
+      let dirtyHeader = false;
+      const dirtyMatches = new Set();
+      let flushing = false;
 
       // Regras em texto legível (para quem lê o log sem conhecer os nomes internos)
       function describeRules(r) {
@@ -245,7 +320,7 @@
           participants: players.map(p => ({ id: p.id, name: p.name, type: p.type, persona: p.persona })),
           matches: []
         };
-        saveToStorage();
+        saveToStorage(true);
       }
 
       // replayInfo: { seed, mode, lobby } — o necessário para reproduzir a partida.
@@ -288,7 +363,12 @@
           };
         }
         sessionData.matches.push(matchEntry);
-        saveToStorage();
+        // Sessão muito longa: as partidas mais antigas saem do log
+        while (sessionData.matches.length > MAX_MATCHES) {
+          sessionData.matches.shift();
+          sessionData.trimmedOldMatches = (sessionData.trimmedOldMatches || 0) + 1;
+        }
+        saveToStorage(true);
       }
 
       function logAction(entry) {
@@ -346,10 +426,52 @@
         saveToStorage();
       }
 
-      // Salva o log a cada jogada. Se o armazenamento do navegador lotar, descarta as
-      // partidas mais antigas da sessão (mantendo a atual) para nunca bloquear
-      // o resto do jogo (avatar, nome, placar, regras).
-      function saveToStorage() {
+      // Marca o que mudou e grava no fim da tarefa atual (várias anotações da mesma jogada
+      // viram uma gravação só). header = a lista de partidas ou o cabeçalho mudou.
+      function saveToStorage(header = false) {
+        if (!sessionData) return;
+        if (!useIdb) { saveLocal(); return; }
+        if (header) dirtyHeader = true;
+        const m = currentMatch();
+        if (m) dirtyMatches.add(m.matchNumber);
+        if (!flushing) {
+          flushing = true;
+          Promise.resolve().then(flush);
+        }
+      }
+
+      function flush() {
+        if (!sessionData || (!dirtyHeader && dirtyMatches.size === 0)) { flushing = false; return; }
+        const { matches, ...head } = sessionData;
+        const keep = matches.map(matchKey);
+        const puts = [];
+        if (dirtyHeader) puts.push([HEADER_KEY, { ...head, matchKeys: keep }]);
+        dirtyMatches.forEach(n => {
+          const m = matches.find(x => x.matchNumber === n);
+          if (m) puts.push([matchKey(m), m]);
+        });
+        const dels = dirtyHeader ? storedMatchKeys.filter(k => !keep.includes(k)) : [];
+        dirtyHeader = false;
+        dirtyMatches.clear();
+        // O IndexedDB copia os valores no put: mudanças depois disso entram na próxima gravação
+        LogDB.write(puts, dels).then(() => {
+          storedMatchKeys = storedMatchKeys.filter(k => !dels.includes(k));
+          puts.forEach(([k]) => { if (k !== HEADER_KEY && !storedMatchKeys.includes(k)) storedMatchKeys.push(k); });
+          flushing = false;
+          if (dirtyHeader || dirtyMatches.size) saveToStorage();
+        }, (err) => {
+          // IndexedDB recusou (modo privado, cota): passa a usar o localStorage
+          useIdb = false;
+          flushing = false;
+          try { NetLog.log('log_storage_fallback', { err: String(err && (err.name || err.message)) }); } catch (e) {}
+          saveLocal();
+        });
+      }
+
+      // Reserva (sem IndexedDB): sessão inteira no localStorage. Se lotar, descarta as
+      // partidas mais antigas da sessão (mantendo a atual) para nunca bloquear o resto
+      // do jogo (avatar, nome, placar, regras).
+      function saveLocal() {
         if (!sessionData) return;
         for (let attempt = 0; attempt < 6; attempt++) {
           try {
@@ -372,30 +494,105 @@
         }
       }
 
-      // Qual partida do log está em andamento (a retomada do host confere antes de continuar nela)
-      function currentMatchRef() {
-        const m = currentMatch();
-        return m && sessionData ? { sessionId: sessionData.sessionId, matchNumber: m.matchNumber } : null;
-      }
-
-      // Host recarregou a página no meio da partida: volta a gravar na mesma partida do log
-      function resumeSession(ref) {
-        const saved = getSavedSession();
-        const m = saved && Array.isArray(saved.matches) ? saved.matches[saved.matches.length - 1] : null;
-        if (!m || !ref || saved.sessionId !== ref.sessionId || m.matchNumber !== ref.matchNumber) return false;
-        sessionData = saved;
-        (m.resumes || (m.resumes = [])).push(new Date().toISOString());
-        saveToStorage();
-        return true;
-      }
-
-      function getSavedSession() {
+      function readLocalJson(key) {
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          const raw = localStorage.getItem(key);
           return raw ? JSON.parse(raw) : null;
         } catch (e) {
           return null;
         }
+      }
+      const progressOf = (m) => (m ? (m.turns ? m.turns.length : 0) + (m.replay ? m.replay.actions.length : 0) + (m.endedAt ? 1 : 0) : -1);
+
+      // Página fechando com gravação pendente: guarda a partida atual no localStorage
+      // (síncrono). Na próxima abertura ela substitui a do IndexedDB se estiver mais completa.
+      function stashPending() {
+        if (!useIdb || !sessionData || (!flushing && !dirtyHeader && dirtyMatches.size === 0)) return;
+        const m = currentMatch();
+        if (!m) return;
+        try { localStorage.setItem(PENDING_KEY, JSON.stringify({ sessionId: sessionData.sessionId, match: m })); } catch (e) {}
+      }
+      window.addEventListener('pagehide', stashPending);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stashPending(); });
+
+      // Abertura: lê o log do IndexedDB (ou migra o do localStorage, uma vez só)
+      const ready = (async () => {
+        let loaded = null;
+        let fromLegacy = false;
+        try {
+          const [head] = await LogDB.getMany([HEADER_KEY]);
+          if (head && Array.isArray(head.matchKeys)) {
+            const ms = await LogDB.getMany(head.matchKeys);
+            const { matchKeys, ...h } = head;
+            loaded = { ...h, matches: ms.filter(Boolean) };
+            storedMatchKeys = matchKeys.slice();
+          }
+          const legacy = readLocalJson(STORAGE_KEY);
+          if (legacy && Array.isArray(legacy.matches) && (!loaded || String(legacy.createdAt) > String(loaded.createdAt))) {
+            loaded = legacy;
+            fromLegacy = true;
+          }
+        } catch (e) {
+          useIdb = false;
+          loaded = readLocalJson(STORAGE_KEY);
+        }
+        const pend = readLocalJson(PENDING_KEY);
+        let fromPending = false;
+        if (pend && pend.match && loaded && Array.isArray(loaded.matches) && pend.sessionId === loaded.sessionId) {
+          const i = loaded.matches.findIndex(m => m.matchNumber === pend.match.matchNumber);
+          if (i !== -1 && progressOf(pend.match) > progressOf(loaded.matches[i])) {
+            loaded.matches[i] = pend.match;
+            fromPending = true;
+          }
+        }
+        // Se uma partida já começou enquanto o log carregava, ela prevalece
+        let wroteOk = true;
+        if (!sessionData && loaded && Array.isArray(loaded.matches)) {
+          sessionData = loaded;
+          if (useIdb && (fromLegacy || fromPending)) {
+            const { matches, ...head } = sessionData;
+            const keep = matches.map(matchKey);
+            try {
+              await LogDB.write([[HEADER_KEY, { ...head, matchKeys: keep }], ...matches.map(m => [matchKey(m), m])],
+                storedMatchKeys.filter(k => !keep.includes(k)));
+              storedMatchKeys = keep;
+            } catch (e) {
+              wroteOk = false;
+            }
+          }
+        }
+        if (useIdb && wroteOk) {
+          // Já está no IndexedDB: o localStorage fica livre para o resto do jogo
+          try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(PENDING_KEY); } catch (e) {}
+        }
+        return { idb: useIdb, matches: sessionData ? sessionData.matches.length : 0, migrated: fromLegacy, pending: fromPending };
+      })();
+
+      // Qual partida do log está em andamento (a retomada do host confere antes de continuar nela)
+      function currentMatchRef() {
+        const m = currentMatch();
+        return m && sessionData
+          ? { sessionId: sessionData.sessionId, matchNumber: m.matchNumber, actions: m.replay ? m.replay.actions.length : 0 }
+          : null;
+      }
+
+      // Host recarregou a página no meio da partida: volta a gravar na mesma partida do log
+      // (chame depois de LoggerModule.ready)
+      function resumeSession(ref) {
+        const m = currentMatch();
+        if (!m || !ref || sessionData.sessionId !== ref.sessionId || m.matchNumber !== ref.matchNumber) return false;
+        (m.resumes || (m.resumes = [])).push(new Date().toISOString());
+        // A página caiu entre gravar a mesa e gravar o log: o replay não consegue seguir dali
+        if (m.replay && Number.isFinite(ref.actions) && m.replay.actions.length !== ref.actions) {
+          m.replay.gap = { logActions: m.replay.actions.length, hostActions: ref.actions };
+        }
+        saveToStorage();
+        return true;
+      }
+
+      // Sessão atual (na memória; depois de LoggerModule.ready inclui a gravada)
+      function getSavedSession() {
+        return sessionData;
       }
 
       // Log completo para exportar: partidas (só no host) + rede (host e convidados)
@@ -442,6 +639,7 @@
         describeRules,
         currentMatchRef,
         resumeSession,
+        ready,
         getSavedSession,
         getExport,
         downloadLastSession
@@ -456,29 +654,71 @@
        - Fila circular: mantém os últimos 600 eventos.
        ========================================================================== */
     const NetLog = (() => {
-      const KEY = 'sh_net_log_v1';
+      const KEY = 'sh_net_log_v1'; // localStorage (reserva e formato antigo)
+      const DB_KEY = 'net';        // IndexedDB (LogDB)
       const MAX_EVENTS = 600;
-      let data = null;
+      // Eventos desta abertura entram na hora; o histórico gravado é juntado quando o
+      // IndexedDB termina de carregar (ready). Até lá nada é gravado, para não apagar o histórico.
+      let data = { events: [], counters: {} };
+      let loaded = false;
+      let useIdb = true;
       let saveTimer = null;
       const pageStart = Date.now();
 
-      function load() {
+      const valid = (d) => (d && Array.isArray(d.events) ? { events: d.events, counters: d.counters || {} } : null);
+      function readLocal() {
         try {
           const raw = Store.get(KEY);
-          data = raw ? JSON.parse(raw) : null;
+          return valid(raw ? JSON.parse(raw) : null);
         } catch (e) {
-          data = null;
+          return null;
         }
-        if (!data || !Array.isArray(data.events)) data = { events: [], counters: {} };
-        if (!data.counters) data.counters = {};
+      }
+
+      const ready = (async () => {
+        let stored = null;
+        let legacy = readLocal();
+        try {
+          [stored] = await LogDB.getMany([DB_KEY]);
+          stored = valid(stored);
+        } catch (e) {
+          useIdb = false;
+        }
+        let base = (useIdb ? stored || legacy : legacy) || { events: [], counters: {} };
+        if (useIdb && stored && legacy) {
+          // Houve um período sem IndexedDB (eventos no localStorage): junta os dois, em ordem
+          base = { events: stored.events.concat(legacy.events).sort((a, b) => String(a.t).localeCompare(String(b.t))), counters: { ...stored.counters } };
+          Object.entries(legacy.counters).forEach(([k, v]) => { base.counters[k] = (base.counters[k] || 0) + v; });
+        }
+        const since = data;
+        data = { events: base.events.concat(since.events), counters: { ...base.counters } };
+        Object.entries(since.counters).forEach(([k, v]) => { data.counters[k] = (data.counters[k] || 0) + v; });
+        if (data.events.length > MAX_EVENTS) data.events.splice(0, data.events.length - MAX_EVENTS);
+        loaded = true;
+        if (useIdb && legacy) {
+          // Migração única: depois de gravar no IndexedDB, libera o localStorage
+          try { await LogDB.write([[DB_KEY, data]]); Store.remove(KEY); } catch (e) { useIdb = false; }
+          legacy = null;
+        }
+        save();
+        return { idb: useIdb, events: data.events.length };
+      })();
+
+      function writeNow() {
+        if (!loaded) return;
+        if (useIdb) {
+          LogDB.write([[DB_KEY, data]]).catch(() => { useIdb = false; writeNow(); });
+        } else {
+          try { Store.set(KEY, JSON.stringify(data)); } catch (e) {}
+        }
       }
 
       function save() {
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-          try { Store.set(KEY, JSON.stringify(data)); } catch (e) {}
-        }, 400);
+        saveTimer = setTimeout(writeNow, 400);
       }
+      // Fechando a página: grava o que estiver esperando
+      window.addEventListener('pagehide', () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; writeNow(); } });
 
       /* Filtro de privacidade/segurança aplicado a TUDO que entra no log:
          - remove endereços IP (v4 e v6), URLs, e-mails e sequências longas tipo token/SDP
@@ -516,7 +756,6 @@
       }
 
       function log(ev, details = {}) {
-        if (!data) load();
         const clean = scrub(details);
         if (clean && clean.room) clean.room = maskRoom(clean.room);
         data.events.push({ t: new Date().toISOString(), s: Math.round((Date.now() - pageStart) / 1000), ev: String(ev).slice(0, 40), ...clean });
@@ -525,19 +764,18 @@
       }
 
       function count(name, n = 1) {
-        if (!data) load();
         data.counters[name] = (data.counters[name] || 0) + n;
         save();
       }
 
       function get() {
-        if (!data) load();
         return data;
       }
 
       function clear() {
         data = { events: [], counters: {} };
         Store.remove(KEY);
+        LogDB.write([], [DB_KEY]).catch(() => {});
       }
 
       // Informações do aparelho/rede (sem dados pessoais)
@@ -567,7 +805,7 @@
         };
       }
 
-      return { log, count, get, clear, environment };
+      return { log, count, get, clear, environment, ready };
     })();
 
     // Erros inesperados do JavaScript vão para o log de conexão (antes só apareciam no console).

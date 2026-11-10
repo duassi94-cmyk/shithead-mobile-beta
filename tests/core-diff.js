@@ -21,8 +21,7 @@ window.CoreDiff = (() => {
 
   // ---- Isolamento da aba de teste ------------------------------------------------
   const noStore = function () {};
-  let goldenRaw = null;
-  const captureStore = function (k, v) { if (k === 'sh_last_session_log') goldenRaw = v; };
+  LogDB.off(); // logs (IndexedDB) desta aba não são gravados
   try {
     Storage.prototype.setItem = noStore;
     Storage.prototype.removeItem = noStore;
@@ -204,14 +203,13 @@ window.CoreDiff = (() => {
     });
     myPlayerId = cfg.humans > 0 ? 'h0' : null;
     startInfo = null;
-    goldenRaw = null;
-    if (golden) { Object.assign(LoggerModule, realLogger); Storage.prototype.setItem = captureStore; }
+    if (golden) Object.assign(LoggerModule, realLogger);
     try {
       startNewMatch(false, cfg.mode);
       turboMode = true; // sem animações; o teste não depende do tempo
       return golden ? playLoop(cfg, maxOps, null, { cfg, ops: 0, problems: [], log: [], cover: {} }, true) : compareMatch(cfg, maxOps);
     } finally {
-      if (golden) { Object.assign(LoggerModule, stubLogger); Storage.prototype.setItem = noStore; }
+      if (golden) Object.assign(LoggerModule, stubLogger);
     }
   }
 
@@ -369,7 +367,9 @@ window.CoreDiff = (() => {
     const list = [];
     for (let k = 0; k < matches; k++) {
       const rep = play(randomConfig(k), maxOps, true);
-      const sess = goldenRaw ? JSON.parse(goldenRaw) : null;
+      // O log fica na memória (a gravação no banco está desligada nesta aba)
+      const live = realLogger.getSavedSession();
+      const sess = live ? JSON.parse(JSON.stringify(live)) : null;
       const m = sess && sess.matches && sess.matches[sess.matches.length - 1];
       if (m) list.push(m);
       api.progress = `referência: ${k + 1}/${matches} (${rep.ops} ações na última)`;

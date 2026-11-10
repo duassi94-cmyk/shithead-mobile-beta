@@ -144,6 +144,7 @@ window.Replay = (() => {
   }
 
   async function fromSaved(index = -1) {
+    await LoggerModule.ready; // o log vem do IndexedDB
     return run(LoggerModule.getSavedSession(), index);
   }
 

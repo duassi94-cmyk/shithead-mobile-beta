@@ -2187,7 +2187,10 @@
         `Sua partida ${where} (${d.G.players.length} jogadores) foi interrompida há ${mins} min.` +
         (d.roomCode ? ' Os convidados voltam sozinhos quando a sala reabrir.' : '');
       box.style.display = 'flex';
-      document.getElementById('btn-resume').onclick = () => resumeHostMatch(d);
+      // O log da partida vem do IndexedDB: espera ele carregar para continuar na mesma partida
+      document.getElementById('btn-resume').onclick = () => {
+        LoggerModule.ready.then(() => resumeHostMatch(d), () => resumeHostMatch(d));
+      };
       document.getElementById('btn-resume-discard').onclick = () => {
         Store.remove(RESUME_KEY);
         box.style.display = 'none';
@@ -3638,16 +3641,44 @@
       LoggerModule.downloadLastSession();
     });
 
+    /* Copiar texto no toque. O Safari (iPhone) só aceita a cópia dentro do próprio toque:
+       o texto é montado na hora, da memória (sem esperar o IndexedDB), e a cópia é pedida
+       sem nenhuma espera antes. Se a área de transferência moderna recusar, tenta o
+       método antigo (seleção + copiar); se nada der certo, quem chamou baixa o arquivo. */
+    function copyTextInGesture(text) {
+      const legacyCopy = () => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed; top:0; left:0; width:1px; height:1px; opacity:0;';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { ta.setSelectionRange(0, text.length); } catch (e) {}
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+        return ok;
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+        return navigator.clipboard.writeText(text).then(() => 'clipboard', () => (legacyCopy() ? 'legacy' : false));
+      }
+      return Promise.resolve(legacyCopy() ? 'legacy' : false);
+    }
+
     document.getElementById('btn-copy-log').addEventListener('click', () => {
       const saved = LoggerModule.getExport();
       if (!saved) return;
-      navigator.clipboard.writeText(JSON.stringify(saved)).then(() => {
-        const btn = document.getElementById('btn-copy-log');
+      const btn = document.getElementById('btn-copy-log');
+      copyTextInGesture(JSON.stringify(saved)).then((how) => {
+        nlog('log_copied', { how: how || 'download' });
+        if (!how) {
+          LoggerModule.downloadLastSession();
+          return;
+        }
         const old = btn.textContent;
         btn.textContent = '✅ Log Copiado!';
         setTimeout(() => { btn.textContent = old; }, 2000);
-      }).catch(() => {
-        LoggerModule.downloadLastSession();
       });
     });
 
@@ -3803,3 +3834,8 @@
 
     loadSavedSetup();
     if (!/[?&]sala=/.test(location.search)) offerHostResume();
+    // Logs carregados do IndexedDB: atualiza o resumo do log no lobby
+    Promise.all([LoggerModule.ready, NetLog.ready]).then((r) => {
+      nlog('log_storage', { idb: r[0].idb && r[1].idb, matches: r[0].matches, migrated: r[0].migrated || undefined, pending: r[0].pending || undefined });
+      refreshLogPanelUI();
+    }, () => {});
