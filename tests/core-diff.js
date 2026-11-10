@@ -1,5 +1,5 @@
-// Comparação fluxo do jogo (game.js) × motor puro (core.js).
-// Escrito para validar a troca do motor antigo (regras dentro do game.js) pelo core.js;
+// Comparação fluxo do jogo (game.js) × motor puro (js/nucleo/motor.js).
+// Escrito para validar a troca do motor antigo (regras dentro do game.js) pelo motor puro;
 // hoje confere que a camada do jogo aplica cada ação e reage a cada evento como esperado.
 // Numa aba do jogo (http://localhost:8765/, não a que você usa para jogar):
 //
@@ -17,7 +17,7 @@
 // propositalmente erradas (fora da vez, cartas misturadas, mesa com baralho, etc.).
 // Durante o teste: sem som, sem desenhar, sem rede e sem gravar no armazenamento da aba.
 window.CoreDiff = (() => {
-  if (typeof Core === 'undefined') throw new Error('core.js não carregado');
+  if (typeof Core === 'undefined') throw new Error('motor (js/nucleo/motor.js) não carregado');
 
   // ---- Isolamento da aba de teste ------------------------------------------------
   const noStore = function () {};

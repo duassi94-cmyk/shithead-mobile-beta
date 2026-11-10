@@ -26,7 +26,7 @@ window.SimHarness = (() => {
   let done = false;
   const countAll = () => G.deck.length + G.discard.length + (G.burnedCount || 0) +
     G.players.reduce((s, p) => s + p.hand.length + p.open.length + p.closed.length, 0);
-  // Confere a cada jogada aplicada pelo motor (core.js) se nenhuma carta sumiu ou duplicou
+  // Confere a cada jogada aplicada pelo motor (js/nucleo/motor.js) se nenhuma carta sumiu ou duplicou
   const origApply = Core.apply;
   Core.apply = (S, pid, action) => {
     const res = origApply(S, pid, action);

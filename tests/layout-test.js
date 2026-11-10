@@ -1,4 +1,5 @@
-// ARQUIVO TEMPORÁRIO DE TESTE — não publicar (apagar antes do commit)
+// Teste de layout: confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela.
+// Use numa aba do jogo que não seja a sua (desliga a gravação no armazenamento da aba).
 (() => {
   // Nada desta aba grava no armazenamento do navegador (dados do usuário intactos)
   const sp = Storage.prototype;
