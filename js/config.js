@@ -8,7 +8,7 @@ const AppConfig = Object.freeze({
   VERSION: 'shithead-mobile-v5',
   // Build publicado: data + número da publicação do dia. Atualizar a cada publicação
   // no GitHub para os logs dizerem exatamente qual código estava rodando.
-  BUILD: '2026-11-10.13',
+  BUILD: '2026-11-10.14',
   // Versão do formato das mensagens entre aparelhos. Mudou o formato? Some 1:
   // o host pede para quem estiver com a versão antiga atualizar a página.
   PROTOCOL: 2,

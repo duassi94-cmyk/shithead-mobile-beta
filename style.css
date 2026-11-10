@@ -1899,3 +1899,20 @@
     #board-overlay #btn-board-close { min-height: var(--tap); font-size: var(--fs-md); }
     /* "+ N iguais": ao lado do Recolher, em destaque */
     #btn-select-same { margin-left: auto; background: rgba(245, 158, 11, 0.18); border-color: var(--accent); color: #fde68a; }
+
+    /* Acessibilidade: texto só para leitores de tela e foco visível pelo teclado */
+    .sr-only {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      margin: -1px; padding: 0; border: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .playing-card:focus-visible, .hand-dock:focus-visible, .react-btn:focus-visible,
+    .top-btn:focus-visible, .board-tab:focus-visible, .action-bar .btn:focus-visible {
+      outline: 3px solid var(--cyan);
+      outline-offset: 2px;
+    }
+    .playing-card:focus { outline: none; }
+    .playing-card:focus-visible { outline: 3px solid var(--cyan); z-index: 5; }

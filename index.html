@@ -71,7 +71,9 @@
       <button id="btn-camera-flip" class="btn btn-secondary" title="Trocar câmera">🔄</button>
     </div>
   </div>
-  <div id="toast-warning">Jogada inválida!</div>
+  <div id="toast-warning" role="alert">Jogada inválida!</div>
+  <!-- Avisos só para leitores de tela (sua vez etc.) -->
+  <div id="sr-announce" class="sr-only" aria-live="assertive"></div>
 
   <!-- Caixa de confirmação / nome do próprio jogo (navegadores dentro de apps bloqueiam
        as janelas confirm/prompt do navegador) -->
@@ -421,21 +423,21 @@
         <div class="felt" id="center-drop-zone">
           <div class="piles-row">
             <div class="pile-box">
-              <div class="deck-stack" id="draw-pile-visual">
+              <div class="deck-stack" id="draw-pile-visual" aria-hidden="true">
                 <div class="playing-card card-back deck-top"><div class="deck-count" id="lbl-deck-count">0</div></div>
               </div>
               <span class="pile-label">Compra <b id="lbl-deck-badge">0</b></span>
             </div>
             <div class="pile-box">
-              <div class="discard-stack" id="discard-pile-visual"></div>
-              <span class="pile-label" id="lbl-discard-badge">Monte 0</span>
+              <div class="discard-stack" id="discard-pile-visual" role="img" aria-label="Monte vazio"></div>
+              <span class="pile-label" id="lbl-discard-badge" aria-hidden="true">Monte 0</span>
             </div>
             <div class="pile-box">
-              <div class="burned-stack" id="burned-pile-visual"></div>
+              <div class="burned-stack" id="burned-pile-visual" aria-hidden="true"></div>
               <span class="pile-label">🔥 Fora <b id="lbl-burned-badge">0</b></span>
             </div>
           </div>
-          <div id="status-banner" class="status-banner">Preparação</div>
+          <div id="status-banner" class="status-banner" role="status" aria-live="polite">Preparação</div>
           <!-- Suas cartas da mesa ficam no feltro, na faixa logo acima da sua área.
                Quando a mão ampliada abre por cima dessa faixa, elas passam para dentro dela. -->
           <div class="my-table-slot" id="my-table-slot">
@@ -493,13 +495,13 @@
 
       </div>
       <!-- Reações rápidas: coluna na lateral direita -->
-      <div class="reaction-bar" id="reaction-bar">
-        <button class="react-btn" data-emoji="👍">👍</button>
-        <button class="react-btn" data-emoji="😂">😂</button>
-        <button class="react-btn" data-emoji="😱">😱</button>
-        <button class="react-btn" data-emoji="😡">😡</button>
-        <button class="react-btn" data-emoji="🔥">🔥</button>
-        <button class="react-btn" data-emoji="💩">💩</button>
+      <div class="reaction-bar" id="reaction-bar" role="group" aria-label="Reações">
+        <button class="react-btn" data-emoji="👍" aria-label="Reagir: joinha">👍</button>
+        <button class="react-btn" data-emoji="😂" aria-label="Reagir: risada">😂</button>
+        <button class="react-btn" data-emoji="😱" aria-label="Reagir: susto">😱</button>
+        <button class="react-btn" data-emoji="😡" aria-label="Reagir: raiva">😡</button>
+        <button class="react-btn" data-emoji="🔥" aria-label="Reagir: fogo">🔥</button>
+        <button class="react-btn" data-emoji="💩" aria-label="Reagir: cocô">💩</button>
         <button class="react-btn gombra-btn" data-emoji="GOMBRA" disabled>GOMBRA!<span class="gcount"></span></button>
         <button class="react-btn dormiu-btn" data-emoji="DORMIU" disabled>DORMIU??</button>
       </div>
@@ -507,7 +509,7 @@
       </div>
 
       <!-- Placar da sessão e regras desta mesa (botão do troféu no topo da mesa) -->
-      <div id="board-overlay" class="board-overlay">
+      <div id="board-overlay" class="board-overlay" role="dialog" aria-modal="true" aria-label="Placar, jogadas e regras">
         <div class="card-box">
           <div class="row">
             <div class="board-tabs" role="tablist" aria-label="Placar e regras">

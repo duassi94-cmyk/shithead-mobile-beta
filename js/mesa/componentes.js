@@ -36,35 +36,51 @@ function MiniSlot({ s }) {
 }
 function Seat({ s }) {
   const cls = 'seat' + (s.turn ? ' turn-active' : '') + (s.next ? ' next-active' : '') + (s.escaped ? ' safe-out' : '');
-  return html`<div class=${cls} data-seat-id=${s.id} style=${{ left: s.left + '%', top: s.top + '%' }}>
-    <div class="seat-avatar-wrap">
+  // Para leitores de tela o assento é lido de uma vez (nome, cartas, mesa, situação)
+  const opens = s.slots.filter(x => x.kind === 'open').map(x => x.spoken).join(', ');
+  const closed = s.slots.filter(x => x.kind !== 'empty').length;
+  const label = `${s.fullName}: ${s.handCount} na mão` + (opens ? `; mesa: ${opens}` : '') +
+    `; ${closed} ${closed === 1 ? 'carta' : 'cartas'} na mesa` + (s.status ? `; ${s.status}` : '') + (s.score ? `; ${s.score}` : '');
+  return html`<div class=${cls} data-seat-id=${s.id} style=${{ left: s.left + '%', top: s.top + '%' }} role="group" aria-label=${label}>
+    <div class="seat-avatar-wrap" aria-hidden="true">
       <img class="seat-avatar" src=${s.avatar} alt="" />
       <span class="skull-badge">${s.score || null}</span>
       <span class="seat-hand-pill" title="Cartas na mão">${s.handCount}</span>
     </div>
-    <div class="seat-name" title=${s.fullName}>${s.name}</div>
-    <div class="opp-mini-table">${s.slots.map((slot, i) => html`<${MiniSlot} key=${i} s=${slot} />`)}</div>
-    <div class="seat-status">${s.status}</div>
+    <div class="seat-name" title=${s.fullName} aria-hidden="true">${s.name}</div>
+    <div class="opp-mini-table" aria-hidden="true">${s.slots.map((slot, i) => html`<${MiniSlot} key=${i} s=${slot} />`)}</div>
+    <div class="seat-status" aria-hidden="true">${s.status}</div>
   </div>`;
 }
 function Seats({ seats }) {
   return seats.map(s => html`<${Seat} key=${s.id} s=${s} />`);
 }
 
+/* ---- Nome falado de uma carta (leitores de tela) ---------------------------- */
+const RANK_NAME = { A: 'Ás', J: 'Valete', Q: 'Dama', K: 'Rei' };
+const SUIT_NAME = { '♠': 'espadas', '♥': 'copas', '♦': 'ouros', '♣': 'paus' };
+function cardSpoken(card) {
+  if (!card || card.hidden) return 'carta virada';
+  if (card.isJoker) return 'Coringa';
+  return `${RANK_NAME[card.label] || card.label} de ${SUIT_NAME[card.suit] || card.suit}`;
+}
+
 /* ---- Carta (mesmo desenho do createCardDOM do game.js) ----------------------
    card: { label, suit, val, isRed, isJoker } ou null/hidden = verso.
    power: ícone do poder da carta ('' = sem). cls: classes extras. style: objeto de estilo. */
-function Card({ card, power = '', cls = '', style = null, back = false, id = null, bind = null }) {
+function Card({ card, power = '', cls = '', style = null, back = false, id = null, bind = null, a11y = null }) {
+  // a11y: { label, pressed } → carta que se toca: botão com nome, focável pelo teclado
+  const ax = a11y ? { role: 'button', tabindex: 0, 'aria-label': a11y.label, 'aria-pressed': a11y.pressed == null ? null : String(a11y.pressed) } : { 'aria-hidden': 'true' };
   // bind(el): chamado a cada desenho com o elemento (eventos de toque ligados pelo game.js)
   const ref = bind ? (el) => { if (el) bind(el); } : null;
-  if (back || !card || card.hidden) return html`<div class=${'playing-card card-back' + (cls ? ' ' + cls : '')} style=${style} data-card-id=${id} ref=${ref}></div>`;
+  if (back || !card || card.hidden) return html`<div class=${'playing-card card-back' + (cls ? ' ' + cls : '')} style=${style} data-card-id=${id} ref=${ref} ...${ax}></div>`;
   const face = !card.isJoker && card.val >= 11 && card.val <= 13;
   const c = 'playing-card' + (card.isRed ? ' red' : '') + (card.isJoker ? ' joker-card' : '') + (face ? ' face-card' : '') + (cls ? ' ' + cls : '');
   const badge = power ? html`<div class="card-power">${power}</div>` : null;
   if (card.isJoker) {
-    return html`<div class=${c} style=${style} data-card-id=${id} ref=${ref}><div class="card-corner"><span class="rank">★</span></div><div class="card-center">🃏</div>${badge}</div>`;
+    return html`<div class=${c} style=${style} data-card-id=${id} ref=${ref} ...${ax}><div class="card-corner"><span class="rank">★</span></div><div class="card-center">🃏</div>${badge}</div>`;
   }
-  return html`<div class=${c} style=${style} data-card-id=${id} ref=${ref}>
+  return html`<div class=${c} style=${style} data-card-id=${id} ref=${ref} ...${ax}>
     <div class="card-corner"><span class="rank">${card.label}</span><span class="suit">${card.suit}</span></div>
     <div class="card-center">${face ? html`<b>${card.label}</b>` : card.suit}</div>${badge}
   </div>`;
@@ -83,7 +99,7 @@ function Pile({ items, tags = [] }) {
    hand: [{ card, back, cls, power, bind }] (já ordenada) — entre dois espaçadores
    table: 3 pilhas [{ closed: item|null, open: item|null }] (item = como na mão) */
 const cardOf = (it, extra) => html`<${Card} key=${it.card.id} id=${it.card.id} card=${it.card} back=${it.back}
-  power=${it.power} cls=${(extra || '') + (it.cls ? ' ' + it.cls : '')} bind=${it.bind} />`;
+  power=${it.power} cls=${(extra || '') + (it.cls ? ' ' + it.cls : '')} bind=${it.bind} a11y=${it.a11y} />`;
 function Hand({ hand }) {
   return [html`<div key="s1" class="hand-spacer"></div>`, ...hand.map(it => cardOf(it, '')), html`<div key="s2" class="hand-spacer"></div>`];
 }
@@ -109,6 +125,7 @@ function mount(el, vnode) {
 }
 
 const Mesa = {
+  cardSpoken,
   seqBar: (el, nodes) => mount(el, html`<${SeqBar} nodes=${nodes} />`),
   seats: (el, seats) => mount(el, html`<${Seats} seats=${seats} />`),
   pile: (el, items, tags) => mount(el, html`<${Pile} items=${items} tags=${tags} />`),
@@ -117,4 +134,4 @@ const Mesa = {
   dock: (el, rows) => mount(el, html`<${DockFan} rows=${rows} />`)
 };
 
-export { Mesa };
+export { Mesa, cardSpoken };

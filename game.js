@@ -2425,12 +2425,39 @@
     const LONG_PRESS_MS = 2000;
     let lastTapInfo = { id: null, t: 0 };
 
+    // Aviso só para leitores de tela (região #sr-announce, invisível na tela)
+    function announce(text) {
+      const el = document.getElementById('sr-announce');
+      if (!el) return;
+      el.textContent = '';
+      setTimeout(() => { el.textContent = text; }, 30); // limpa antes: o mesmo texto é lido de novo
+    }
+
+    // Teclado nas cartas (foco com Tab): Espaço = tocar (seleciona / troca / vira às cegas);
+    // Enter = jogar a seleção (ou só esta carta), como o toque duplo
+    function onCardKey(domEl, e) {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      const ci = domEl.__ci;
+      if (!ci || ci.off) return;
+      e.preventDefault();
+      SoundEngine.init();
+      const { card, sourceType, me, isMyTurn } = ci;
+      if (e.key === 'Enter' && G.phase === 'PLAY' && sourceType !== 'closed') {
+        const ids = sourceType === 'hand'
+          ? (selectedHandIds.has(card.id) ? [Array.from(selectedHandIds), Array.from(selectedOpenIds)] : [[card.id], []])
+          : (selectedOpenIds.has(card.id) ? [Array.from(selectedHandIds), Array.from(selectedOpenIds)] : [[], [card.id]]);
+        attemptLocalPlay(ids[0], ids[1], domEl.getBoundingClientRect());
+        return;
+      }
+      handleCardTap(card, sourceType, me, isMyTurn, domEl);
+    }
+
     // Liga os eventos de toque uma vez por elemento (os componentes reaproveitam o elemento
     // entre desenhos). Os dados atuais (carta, origem, você, sua vez) ficam em domEl.__ci,
     // atualizados a cada desenho, e são lidos no início de cada toque.
     function bindCard(domEl, ci) {
       domEl.__ci = ci;
-      if (!domEl.__ciBound) { domEl.__ciBound = true; attachCardInteraction(domEl); }
+      if (!domEl.__ciBound) { domEl.__ciBound = true; attachCardInteraction(domEl); domEl.addEventListener('keydown', (e) => onCardKey(domEl, e)); }
     }
 
     function attachCardInteraction(domEl) {
@@ -2813,7 +2840,7 @@
           status: p.escaped ? '✔ Salvo!' : (turn ? 'jogando…' : (next ? 'próximo' : '')),
           slots: [0, 1, 2].map(i => {
             const o = p.open[i];
-            if (o) return { kind: 'open', red: !!o.isRed, label: o.isJoker ? '★' : o.label };
+            if (o) return { kind: 'open', red: !!o.isRed, label: o.isJoker ? '★' : o.label, spoken: Mesa.cardSpoken(o) };
             return { kind: p.closed[i] ? 'closed' : 'empty' };
           })
         });
@@ -2912,6 +2939,8 @@
         tags.push({ cls: 'tag-latest', text: `${(lastGroup.playerName || 'Topo').split(' ')[0]} ${lastGroup.cards.length}x` });
       }
       Mesa.pile(discardEl, items, tags);
+      const topCard = G.discard[G.discard.length - 1];
+      discardEl.setAttribute('aria-label', totalCards ? `Monte: ${totalCards} ${totalCards === 1 ? 'carta' : 'cartas'}, no topo ${Mesa.cardSpoken(topCard)}` : 'Monte vazio');
     }
 
     // Mão recolhida/aberta (a camada ampliada fica sobre a mesa e não empurra o layout)
@@ -2958,6 +2987,8 @@
       label.innerHTML = me.escaped ? '✔ Escapou'
         : `${isMyTurn ? '<span class="dock-turn">⚡<span class="dock-turn-txt"> Vez</span></span>' : ''}<span class="dock-n">${n}</span><span class="dock-sub">na mão</span>`;
       dock.title = handOpen ? 'Recolher a mão' : 'Ampliar a mão';
+      dock.setAttribute('aria-label', (handOpen ? 'Recolher a mão' : 'Ampliar a mão') + (hideHand ? '' : ` (${n} ${n === 1 ? 'carta' : 'cartas'})`));
+      dock.setAttribute('aria-expanded', String(handOpen));
       dock.disabled = n === 0 || hideHand;
       dock.style.visibility = me.escaped && n === 0 ? 'hidden' : 'visible';
     }
@@ -2992,7 +3023,9 @@
       const chip = document.getElementById('lbl-Constraint');
       chip.textContent = constraintTxt;
       chip.classList.toggle('rule-hot', hot);
-      document.getElementById('status-banner').textContent = G.bannerText;
+      // Só troca o texto quando muda: a faixa é lida pelos leitores de tela (role=status)
+      const bannerEl = document.getElementById('status-banner');
+      if (bannerEl.textContent !== G.bannerText) bannerEl.textContent = G.bannerText;
 
       renderTurnSequenceBar(myIdx);
       renderSeats(myIdx, nextIdx);
@@ -3026,15 +3059,22 @@
 
       // Cartas da mesa (fechadas + abertas por cima) e mão: componentes (js/mesa/componentes.js).
       // bind liga o toque uma vez por carta e atualiza os dados a cada desenho.
-      const item = (card, sourceType, cls) => ({
+      // a11y: nome falado + "selecionada" (leitores de tela); só para quem joga (não para quem assiste)
+      const spokenOf = (card, sourceType, cls, n) => {
+        if (sourceType === 'closed') return `Carta fechada ${n} da sua mesa` + (isMyTurn && me.hand.length === 0 && me.open.length === 0 ? ', virar às cegas' : '');
+        if (hideHand) return 'Carta virada';
+        return Mesa.cardSpoken(card) + (sourceType === 'open' ? ', na sua mesa' : '') + (cls.includes('playable') ? ', pode jogar' : '');
+      };
+      const item = (card, sourceType, cls, n = 0) => ({
         card, cls, power: powerIcon(card),
+        a11y: spectator ? null : { label: spokenOf(card, sourceType, cls, n), pressed: sourceType === 'closed' ? null : cls.includes('selected') },
         bind: (el) => bindCard(el, { card, sourceType, me, isMyTurn, off: spectator })
       });
       const tablePlayable = isMyTurn && me.hand.length === 0 && G.deck.length === 0;
       Mesa.table(document.getElementById('my-table-cards'), [0, 1, 2].map(i => {
         const c = me.closed[i], o = me.open[i];
         return {
-          closed: c ? item(c, 'closed', '') : null,
+          closed: c ? item(c, 'closed', '', i + 1) : null,
           open: o ? item(o, 'open', [selectedOpenIds.has(o.id) && 'selected', tablePlayable && RulesEngine.isCardPlayable(G, o) && 'playable'].filter(Boolean).join(' ')) : null
         };
       }));
@@ -3060,7 +3100,10 @@
         ((G.phase === 'PLAY' && isMyTurn) || (G.phase === 'SWAP' && !me.readySwap));
       // Muda só quando começa/termina a SUA vez (ou a fase): fora da vez, se você abrir a mão ela fica aberta
       const handKey = `${G.phase}|${wantOpen ? 'on' + (G.turnCounter || 0) : 'off'}`;
-      if (handKey !== lastHandKey) { lastHandKey = handKey; handOpen = wantOpen; }
+      if (handKey !== lastHandKey) {
+        lastHandKey = handKey; handOpen = wantOpen;
+        if (wantOpen && G.phase === 'PLAY') announce(me.hand.length ? `Sua vez. ${me.hand.length} na mão.` : 'Sua vez: jogue pelas cartas da sua mesa.');
+      }
       if (me.hand.length === 0 || hideHand) handOpen = false;
       zone.classList.toggle('hand-open', handOpen);
       zone.classList.toggle('spectating', spectator);
@@ -3859,14 +3902,17 @@
       renderBoardOverlay();
       setOverlayTab('board');
       document.getElementById('board-overlay').classList.add('show');
+      document.querySelector('[data-overlay-tab="board"]').focus();
     });
     document.getElementById('btn-history-game').addEventListener('click', () => {
       setOverlayTab('history');
       document.getElementById('board-overlay').classList.add('show');
+      document.querySelector('[data-overlay-tab="history"]').focus();
     });
     document.getElementById('btn-rules-game').addEventListener('click', () => {
       setOverlayTab('rules');
       document.getElementById('board-overlay').classList.add('show');
+      document.querySelector('[data-overlay-tab="rules"]').focus();
     });
     // Menu ⋯ da mesa: abre embaixo do botão; fecha ao escolher um item, ao tocar fora ou com Esc
     const gameMenu = document.getElementById('game-menu');
@@ -3885,7 +3931,10 @@
       if (!gameMenu.hidden && !gameMenu.contains(e.target) && !gameMenuBtn.contains(e.target)) setGameMenu(false);
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !gameMenu.hidden) { setGameMenu(false); gameMenuBtn.focus(); }
+      if (e.key !== 'Escape') return;
+      if (!gameMenu.hidden) { setGameMenu(false); gameMenuBtn.focus(); return; }
+      const ov = document.getElementById('board-overlay');
+      if (ov.classList.contains('show')) { ov.classList.remove('show'); gameMenuBtn.focus(); }
     });
     document.getElementById('btn-leave').addEventListener('click', () => setGameMenu(false));
     const closeBoardOverlay = () => document.getElementById('board-overlay').classList.remove('show');
