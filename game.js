@@ -62,9 +62,18 @@
 
     const RANK_BY_LABEL = {};
     AppConfig.RANKS.forEach(r => { RANK_BY_LABEL[r.label] = r; });
+    // Ids de carta: sorteados ("k" + 7 caracteres). Cartas que o jogador não pode ver chegam
+    // "viradas" ({ id, hidden: true }): as próprias fechadas com o id real (para escolher
+    // qual virar), e as dos outros/baralho com um marcador de posição (d12, h2_5, f1_0).
+    const CARD_ID_RE = /^k[a-z0-9]{7}$/;
+    const PLACEHOLDER_ID_RE = /^(?:d\d{1,3}|[hf]\d_\d{1,3})$/;
     function sanitizeCard(c) {
       if (!c || typeof c !== 'object') return null;
-      const id = typeof c.id === 'string' && /^[cj]_\d{1,4}$|^tst\d$/.test(c.id) ? c.id : null;
+      if (c.hidden) {
+        const hid = typeof c.id === 'string' && (CARD_ID_RE.test(c.id) || PLACEHOLDER_ID_RE.test(c.id)) ? c.id : null;
+        return hid ? { id: hid, hidden: true } : null;
+      }
+      const id = typeof c.id === 'string' && CARD_ID_RE.test(c.id) ? c.id : null;
       if (!id) return null;
       if (c.isJoker || c.label === 'JOKER') {
         return { id, label: 'JOKER', val: 16, suit: '★', isRed: false, isJoker: true, public: !!c.public };
@@ -192,7 +201,7 @@
       return {
         matchId: String(r.matchId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64),
         at: String(r.at || '').slice(0, 30),
-        room: /^\d{4}$/.test(String(r.room)) ? String(r.room) : null,
+        room: ROOM_CODE_ANY_RE.test(String(r.room)) ? String(r.room) : null,
         n,
         players: r.players.slice(0, 6).map(p => ({
           id: sanitizeId(p && p.id) || 'desconhecido',
@@ -211,6 +220,23 @@
     }
 
     const REACTIONS_OK = ['👍', '😂', '😱', '😡', '🔥', '💩', 'GOMBRA', 'DORMIU'];
+
+    /* ---- Código da sala ----------------------------------------------------------
+       5 caracteres de um alfabeto sem símbolos que se confundem (sem 0/O, 1/I/L, 2/Z,
+       5/S, 8/B, G/6): cerca de 6,4 milhões de combinações. Aceita minúsculas e espaços
+       ao digitar. O placar ainda reconhece salas antigas de 4 números. */
+    const ROOM_ALPHABET = 'ACDEFHJKMNPRTUVWXY34679';
+    const ROOM_CODE_LEN = 5;
+    const ROOM_CODE_RE = new RegExp('^[' + ROOM_ALPHABET + ']{' + ROOM_CODE_LEN + '}$');
+    const ROOM_CODE_ANY_RE = new RegExp('^(?:\\d{4}|[' + ROOM_ALPHABET + ']{' + ROOM_CODE_LEN + '})$');
+    function newRoomCode() {
+      let code = '';
+      for (let i = 0; i < ROOM_CODE_LEN; i++) code += ROOM_ALPHABET[RulesEngine.randInt(ROOM_ALPHABET.length)];
+      return code;
+    }
+    function normalizeRoomCode(raw) {
+      return String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, ROOM_CODE_LEN + 2);
+    }
 
     function showInvalidWarning(msg, elementToShake = null) {
       SoundEngine.invalidError();
@@ -242,7 +268,7 @@
 
     function createCardDOM(card, isFaceDown = false) {
       const el = document.createElement('div');
-      if (isFaceDown || !card) {
+      if (isFaceDown || !card || card.hidden) {
         el.className = 'playing-card card-back';
         return el;
       }
@@ -513,7 +539,7 @@
       const msg = { type: 'REACTION', playerId: myPlayerId, emoji, target };
       if (isHost) {
         showReaction(myPlayerId, emoji, target);
-        clientConns.forEach(c => netSend(c, msg));
+        joinedConns().forEach(c => netSend(c, msg));
       } else if (hostConn) {
         // O convidado vê na hora; o host repassa para os outros
         showReaction(myPlayerId, emoji, target);
@@ -539,7 +565,7 @@
       const emoji = pool[Math.floor(Math.random() * pool.length)];
       setTimeout(() => {
         showReaction(bot.id, emoji);
-        clientConns.forEach(c => netSend(c, { type: 'REACTION', playerId: bot.id, emoji }));
+        joinedConns().forEach(c => netSend(c, { type: 'REACTION', playerId: bot.id, emoji }));
       }, 450 + Math.random() * 2500);
     }
 
@@ -559,7 +585,7 @@
       setTimeout(() => {
         if (!G || `${G.turnIdx}|${G.turnCounter || 0}` !== key) return; // já jogou
         showReaction(bot.id, 'DORMIU', p.id);
-        clientConns.forEach(c => netSend(c, { type: 'REACTION', playerId: bot.id, emoji: 'DORMIU', target: p.id }));
+        joinedConns().forEach(c => netSend(c, { type: 'REACTION', playerId: bot.id, emoji: 'DORMIU', target: p.id }));
       }, Math.random() * 6000);
     }, 1000);
 
@@ -855,7 +881,7 @@
       addToHistory(record);
       sessionRecords.push(record);
       G.sessionLosses = sessionLossesForTable();
-      clientConns.forEach(c => netSend(c, { type: 'MATCH_RESULT', record, session: sessionRecords }));
+      joinedConns().forEach(c => netSend(c, { type: 'MATCH_RESULT', record, session: sessionRecords }));
       renderScoreboard();
     }
 
@@ -983,6 +1009,8 @@
         scheduleBotIfNeeded();
       }
       lobbySlots = lobbySlots.filter(s => s.id !== pid);
+      // Removido deixa de ser "conhecido": com a sala trancada, não volta sozinho
+      delete guestSecrets[pid];
       renderLobbySlots();
       broadcastLobby();
     }
@@ -994,7 +1022,8 @@
        - O Host é a "mesa": guarda o estado, roda os bots e valida as jogadas.
        - Link/QR: ...?sala=1234 abre o jogo e entra direto na sala.
        ========================================================================== */
-    const PEER_PREFIX = 'shithead-mobile-v5-sala-';
+    // Beta e testes locais usam salas separadas das oficiais (convidados de um não entram no outro)
+    const PEER_PREFIX = AppConfig.ENV === 'prod' ? 'shithead-mobile-v5-sala-' : 'shithead-mobile-beta-sala-';
     const CONN_OPTS = { reliable: true, serialization: 'json' };
     let wakeLock = null;
     let joinRoomCode = '';
@@ -1125,14 +1154,36 @@
     }
 
     // Estado da partida sem as fotos (elas já vão no lobby): mensagem bem menor
-    function stateForNet() {
+    /* ---- O que cada aparelho pode ver ------------------------------------------
+       O host guarda a mesa inteira, mas manda a cada convidado só a parte dele:
+       - a própria mão completa;
+       - as próprias cartas fechadas viradas (só o id, para escolher qual virar);
+       - das outras pessoas, a mão e as fechadas como cartas viradas sem id real;
+       - o baralho como cartas viradas (só a quantidade importa).
+       Cartas abertas na mesa e o monte continuam visíveis para todos.
+       viewerId que não está na mesa (espectador) não vê nenhuma carta escondida. */
+    function hiddenRun(n, tag) {
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) out[i] = { id: tag + i, hidden: true };
+      return out;
+    }
+    function stateForNet(viewerId) {
       if (!G) return G;
-      G.version = (G.version || 0) + 1;
       return {
         ...G,
+        stall: undefined,
+        deck: hiddenRun(G.deck.length, 'd'),
         sessionLosses: sessionLossesForTable(),
         loserAvatar: null,
-        players: G.players.map(p => ({ ...p, avatar: null }))
+        players: G.players.map((p, pi) => {
+          const mine = !!viewerId && p.id === viewerId;
+          return {
+            ...p,
+            avatar: null,
+            hand: mine ? p.hand : hiddenRun(p.hand.length, 'h' + pi + '_'),
+            closed: mine ? p.closed.map(c => ({ id: c.id, hidden: true })) : hiddenRun(p.closed.length, 'f' + pi + '_')
+          };
+        })
       };
     }
 
@@ -1159,10 +1210,22 @@
       return !!(G && G.phase !== 'ABANDONED' && document.getElementById('screen-game').classList.contains('active'));
     }
 
+    // Tempo de ida e volta de cada convidado (PING → PONG): resumo no log a cada ~30 s
+    function recordRtt(conn, sentAt) {
+      const rtt = Date.now() - sentAt;
+      if (!(rtt >= 0 && rtt < 60000)) return;
+      const s = conn.__rtt || (conn.__rtt = { n: 0, sum: 0, max: 0 });
+      s.n++; s.sum += rtt; s.max = Math.max(s.max, rtt);
+      if (s.n >= 12) {
+        nlog('rtt', { pid: shortId(conn.__playerId), avgMs: Math.round(s.sum / s.n), maxMs: s.max, n: s.n });
+        conn.__rtt = { n: 0, sum: 0, max: 0 };
+      }
+    }
+
     setInterval(() => {
       if (isHost && clientConns.length) {
-        const ping = { type: 'PING', inGame: hostInGame(), version: G ? (G.version || 0) : 0 };
-        clientConns.forEach(c => netSend(c, ping));
+        const ping = { type: 'PING', inGame: hostInGame(), version: G ? (G.version || 0) : 0, protocol: AppConfig.PROTOCOL, t: Date.now() };
+        clientConns.forEach(c => { if (c.__playerId) netSend(c, ping); });
       }
       // 30 s de folga: navegadores "freiam" timers de abas em segundo plano no host
       if (!isHost && joinRoomCode && hostConn && hostConn.open && lastHostPingAt && Date.now() - lastHostPingAt > 30000) {
@@ -1274,8 +1337,11 @@
         lobbySlots[0].name = 'Anfitrião';
         renderLobbySlots();
       }
-      roomCode = String(Math.floor(1000 + Math.random() * 9000));
-      if (attempt === 0) { sessionRecords = []; renderScoreboard(); } // sala nova = sessão nova
+      roomCode = newRoomCode();
+      if (attempt === 0) {
+        sessionRecords = []; renderScoreboard(); // sala nova = sessão nova
+        setRoomLocked(false);
+      }
       setNetStatus('host-net-status', 'Criando sala...', 'info');
       const t0 = Date.now();
       nlog('room_create', { attempt, env: attempt === 0 ? NetLog.environment() : undefined });
@@ -1383,9 +1449,9 @@
     }
 
     function joinRoom(code) {
-      code = String(code || '').replace(/\D/g, '').slice(0, 4);
-      if (code.length !== 4) {
-        setNetStatus('join-net-status', 'Digite o código de 4 números da sala.', 'error');
+      code = normalizeRoomCode(code);
+      if (!ROOM_CODE_RE.test(code)) {
+        setNetStatus('join-net-status', `Digite o código da sala: ${ROOM_CODE_LEN} letras ou números (ex.: KX7RD).`, 'error');
         return;
       }
       SoundEngine.init();
@@ -1431,7 +1497,7 @@
           watchPeerConnection(conn, 'host');
           const myName = document.getElementById('inp-name').value.trim() || 'Jogador';
           const avatar = myCustomAvatar || AvatarModule.getDefaultAvatar('human', null);
-          netSend(conn, { type: 'JOIN', id: myPlayerId, secret: getDeviceSecret(), name: myName, avatar, env: NetLog.environment() });
+          netSend(conn, { type: 'JOIN', id: myPlayerId, secret: getDeviceSecret(), name: myName, avatar, env: NetLog.environment(), protocol: AppConfig.PROTOCOL, build: AppConfig.BUILD });
           // Conta ao host por que precisou reconectar (fica no log dos dois lados)
           if (joinAttempts > 1) netSend(conn, { type: 'NETLOG', what: 'reconnected', info: { attempt: joinAttempts, lastReason: lastLostReason } });
           lastLostReason = null;
@@ -1503,6 +1569,39 @@
       reconnectTimer = setTimeout(() => joinRoom(joinRoomCode), 2500);
     }
 
+    // Host e convidado com versões diferentes do formato das mensagens.
+    // Convidado desatualizado: recarrega a página uma vez (o service worker busca a versão nova).
+    // Host desatualizado: avisa para o host recarregar.
+    function handleVersionMismatch(hostProtocol, hostBuild) {
+      nlog('version_mismatch', { mine: AppConfig.PROTOCOL, host: hostProtocol, hostBuild });
+      NetLog.count('version_mismatch');
+      clearTimeout(reconnectTimer);
+      if (hostConn) hostConn.__stale = true;
+      const code = joinRoomCode;
+      joinRoomCode = '';
+      if (myPeer) { try { myPeer.destroy(); } catch (e) {} }
+      if (document.getElementById('screen-game').classList.contains('active')) {
+        G = null;
+        document.getElementById('screen-game').classList.remove('active');
+        document.getElementById('screen-lobby').classList.add('active');
+      }
+      setGuestLobbyMode(false);
+      if (hostProtocol > AppConfig.PROTOCOL) {
+        let lastTry = 0;
+        try { lastTry = Number(sessionStorage.getItem('sh_update_reload')) || 0; } catch (e) {}
+        if (Date.now() - lastTry > 120000) {
+          try { sessionStorage.setItem('sh_update_reload', String(Date.now())); } catch (e) {}
+          setNetStatus('join-net-status', 'O host está com uma versão mais nova do jogo. Atualizando esta página...', 'warn');
+          const url = code ? getJoinUrl(code) : location.href;
+          setTimeout(() => location.replace(url), 900);
+          return;
+        }
+        setNetStatus('join-net-status', 'Este aparelho está com uma versão antiga do jogo. Feche a aba, abra o link de novo e tente outra vez.', 'error');
+      } else {
+        setNetStatus('join-net-status', 'O host está com uma versão antiga do jogo. Peça para ele recarregar a página e criar a sala de novo.', 'error');
+      }
+    }
+
     // Convidado: esconde o que só o host controla
     function setGuestLobbyMode(guest) {
       document.getElementById('box-rules').style.display = guest ? 'none' : 'flex';
@@ -1529,6 +1628,15 @@
 
     document.getElementById('btn-connect-peer').addEventListener('click', () => {
       joinRoom(document.getElementById('inp-room-code').value);
+    });
+    // Código digitado: maiúsculas e sem espaços, enquanto a pessoa digita
+    document.getElementById('inp-room-code').addEventListener('input', (e) => {
+      const v = normalizeRoomCode(e.target.value).slice(0, ROOM_CODE_LEN);
+      if (e.target.value !== v) e.target.value = v;
+    });
+    document.getElementById('btn-lock-room').addEventListener('click', () => {
+      setRoomLocked(!roomLocked);
+      nlog('room_lock', { locked: roomLocked });
     });
     document.getElementById('inp-room-code').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinRoom(e.target.value);
@@ -1565,11 +1673,64 @@
         downlinkMbps: num(e.downlinkMbps), rttMs: num(e.rttMs), saveData: !!e.saveData, standalone: !!e.standalone, webrtc: !!e.webrtc };
     }
 
+    /* ---- Limite de mensagens por convidado -------------------------------------
+       "Balde de fichas" por tipo de mensagem: cada tipo enche a uma taxa por segundo
+       até um máximo. O que passar disso é descartado (e contado no log), para um
+       aparelho com defeito ou mal-intencionado não sobrecarregar o host. Toque duplo,
+       arrastar e o duelo de velocidade ficam bem abaixo destes limites. */
+    const RATE_LIMITS = {
+      ACTION: [8, 12], REACTION: [3, 5], RESYNC: [0.5, 2], PROFILE: [1, 3],
+      NETLOG: [1, 3], TURBO: [1, 2], JOIN: [1, 3], PONG: [2, 4]
+    };
+    function allowMessage(conn, type) {
+      const lim = RATE_LIMITS[type];
+      if (!lim) return true;
+      const [perSec, burst] = lim;
+      const now = Date.now();
+      const buckets = conn.__rate || (conn.__rate = {});
+      const b = buckets[type] || (buckets[type] = { tokens: burst, at: now });
+      b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * perSec);
+      b.at = now;
+      if (b.tokens < 1) {
+        NetLog.count('rate_limited_' + type);
+        return false;
+      }
+      b.tokens -= 1;
+      return true;
+    }
+
+    // Trancar a sala: aparelhos novos não entram; quem já esteve na sala pode voltar
+    // (a reconexão depois da tela apagar passa pelo mesmo JOIN).
+    let roomLocked = false;
+    function setRoomLocked(locked) {
+      roomLocked = !!locked;
+      const btn = document.getElementById('btn-lock-room');
+      if (btn) {
+        btn.textContent = roomLocked ? '🔒 Sala trancada — toque para destrancar' : '🔓 Sala aberta — toque para trancar';
+        btn.setAttribute('aria-pressed', roomLocked ? 'true' : 'false');
+        btn.classList.toggle('btn-locked', roomLocked);
+      }
+      joinedConns().forEach(c => { try { netSend(c, { type: 'LOBBY_LOCK', locked: roomLocked }); } catch (e) {} });
+    }
+
     function handleHostReceive(conn, data) {
       if (!data || typeof data !== 'object') return;
       // Antes do JOIN aceito, a conexão só pode mandar JOIN
       if (!conn.__playerId && data.type !== 'JOIN') return;
+      if (!allowMessage(conn, data.type)) return;
+      if (data.type === 'PONG') {
+        if (Number.isFinite(Number(data.t))) recordRtt(conn, Number(data.t));
+        return;
+      }
       if (data.type === 'JOIN') {
+        // Versão diferente do formato das mensagens: pede para atualizar antes de qualquer coisa
+        if (Number(data.protocol) !== AppConfig.PROTOCOL) {
+          nlog('join_rejected', { reason: 'versao', guestProtocol: Number(data.protocol) || 0, guestBuild: typeof data.build === 'string' ? data.build.slice(0, 20) : null });
+          NetLog.count('join_rejected_version');
+          netSend(conn, { type: 'UPDATE_REQUIRED', protocol: AppConfig.PROTOCOL, build: AppConfig.BUILD });
+          setTimeout(() => { try { conn.close(); } catch (e) {} }, 1500);
+          return;
+        }
         const id = typeof data.id === 'string' && GUEST_ID_RE.test(data.id) ? data.id : null;
         const secret = typeof data.secret === 'string' && /^[A-Za-z0-9]{16,64}$/.test(data.secret) ? data.secret : null;
         if (!id || !secret) {
@@ -1583,6 +1744,13 @@
           nlog('join_rejected', { reason: 'segredo_diferente', pid: shortId(id) });
           NetLog.count('join_rejected');
           try { conn.close(); } catch (e) {}
+          return;
+        }
+        if (roomLocked && !guestSecrets[id]) {
+          nlog('join_rejected', { reason: 'sala_trancada', pid: shortId(id) });
+          NetLog.count('join_rejected_locked');
+          netSend(conn, { type: 'ROOM_LOCKED' });
+          setTimeout(() => { try { conn.close(); } catch (e) {} }, 1500);
           return;
         }
         guestSecrets[id] = secret;
@@ -1639,11 +1807,12 @@
         renderLobbySlots();
         broadcastLobby();
         netSend(conn, { type: 'SESSION', session: sessionRecords });
+        if (roomLocked) netSend(conn, { type: 'LOBBY_LOCK', locked: true });
         setNetStatus('host-net-status', `${name} entrou na sala!`, 'ok');
         SoundEngine.select();
         // Quem entra durante uma partida recebe a mesa atual (como espectador se não estiver nela)
         if (G && G.phase !== 'ABANDONED' && document.getElementById('screen-game').classList.contains('active')) {
-          netSend(conn, { type: 'STATE_SYNC', state: stateForNet(), fx: null });
+          netSend(conn, { type: 'STATE_SYNC', state: stateForNet(conn.__playerId), fx: null });
         }
       } else if (data.type === 'PROFILE') {
         const slot = lobbySlots.find(s => s.id === conn.__playerId);
@@ -1671,7 +1840,7 @@
         nlog('resync_request', { pid: shortId(conn.__playerId) });
         NetLog.count('resync_request');
         // Convidado perdeu alguma mensagem: reenvia a mesa (ou o lobby)
-        if (hostInGame()) netSend(conn, { type: 'STATE_SYNC', state: stateForNet(), fx: null });
+        if (hostInGame()) netSend(conn, { type: 'STATE_SYNC', state: stateForNet(conn.__playerId), fx: null });
         else netSend(conn, { type: 'LOBBY_SYNC', slots: lobbySlots });
       } else if (data.type === 'ACTION') {
         // Só aceita ações do próprio jogador daquela conexão, com formato conhecido
@@ -1703,7 +1872,7 @@
           if (!cur || cur.id !== data.target || Date.now() - turnStartedAt < SLEEP_AFTER_MS - 2000) return;
         }
         showReaction(data.playerId, data.emoji, data.target || null);
-        clientConns.forEach(c => { if (c !== conn) netSend(c, { type: 'REACTION', playerId: data.playerId, emoji: data.emoji, target: data.target || null }); });
+        joinedConns().forEach(c => { if (c !== conn) netSend(c, { type: 'REACTION', playerId: data.playerId, emoji: data.emoji, target: data.target || null }); });
       }
     }
 
@@ -1715,7 +1884,21 @@
         if (slots.length) lobbySlots = slots;
         renderLobbySlots();
       } else if (data.type === 'PING') {
+        // Host com outra versão do formato das mensagens: não dá para continuar
+        if (Number(data.protocol) !== AppConfig.PROTOCOL) { handleVersionMismatch(Number(data.protocol) || 0, null); return; }
+        if (hostConn && hostConn.open && Number.isFinite(Number(data.t))) netSend(hostConn, { type: 'PONG', t: Number(data.t) });
         handlePing({ inGame: !!data.inGame, version: Number(data.version) || 0 });
+      } else if (data.type === 'UPDATE_REQUIRED') {
+        handleVersionMismatch(Number(data.protocol) || 0, typeof data.build === 'string' ? data.build.slice(0, 20) : null);
+      } else if (data.type === 'ROOM_LOCKED') {
+        nlog('room_locked');
+        setNetStatus('join-net-status', 'A sala está trancada pelo host. Peça para ele destrancar e tente de novo.', 'error');
+        joinRoomCode = '';
+        if (hostConn) hostConn.__stale = true;
+        setGuestLobbyMode(false);
+      } else if (data.type === 'LOBBY_LOCK') {
+        const el = document.getElementById('join-net-status');
+        if (el && joinRoomCode) setNetStatus('join-net-status', data.locked ? `✔ Na sala ${joinRoomCode} (trancada pelo host). Aguardando o host iniciar.` : `✔ Na sala ${joinRoomCode}! Aguardando o host iniciar.`, 'ok');
       } else if (data.type === 'MATCH_RESULT') {
         // Guarda no histórico deste aparelho as partidas de que participei
         const rec = sanitizeRecord(data.record);
@@ -1768,22 +1951,37 @@
       }
     }
 
+    // Conexões já aceitas pelo host (JOIN validado). Quem ainda não entrou não recebe nada.
+    function joinedConns() {
+      return clientConns.filter(c => !!c.__playerId);
+    }
+
     function broadcastLobby() {
-      clientConns.forEach(c => { try { netSend(c, { type: 'LOBBY_SYNC', slots: lobbySlots }); } catch (e) {} });
+      clientConns.forEach(c => { if (!c.__playerId) return; try { netSend(c, { type: 'LOBBY_SYNC', slots: lobbySlots }); } catch (e) {} });
     }
 
     function broadcastState(fx = null) {
       if (!isHost || clientConns.length === 0) return;
+      // Uma versão nova por transmissão (antes subia uma vez por convidado)
+      G.version = (G.version || 0) + 1;
       // fromRect é coordenada da tela de quem jogou: não serve para os outros aparelhos
       const cleanFx = fx ? { ...fx, fromRect: undefined } : null;
-      clientConns.forEach(c => { try { netSend(c, { type: 'STATE_SYNC', state: stateForNet(), fx: cleanFx }); } catch (e) {} });
+      // Só para conexões já aceitas (JOIN validado): quem ainda não entrou não recebe nada da mesa
+      clientConns.forEach(c => { if (!c.__playerId) return; try { netSend(c, { type: 'STATE_SYNC', state: stateForNet(c.__playerId), fx: cleanFx }); } catch (e) {} });
     }
 
     // Entrada direta pelo link/QR (?sala=1234)
     function autoJoinFromUrl() {
       const params = new URLSearchParams(window.location.search);
-      const sala = (params.get('sala') || '').replace(/\D/g, '');
-      if (sala.length !== 4) return;
+      const sala = normalizeRoomCode(params.get('sala'));
+      if (!ROOM_CODE_RE.test(sala)) {
+        if (params.get('sala')) {
+          // Link de uma versão antiga (código de 4 números) ou digitado errado
+          document.getElementById('join-box').style.display = 'flex';
+          setNetStatus('join-net-status', 'Este link de sala não é válido nesta versão do jogo. Peça um link novo ao host.', 'error');
+        }
+        return;
+      }
       document.getElementById('join-box').style.display = 'flex';
       document.getElementById('inp-room-code').value = sala;
       document.getElementById('join-invite-banner').style.display = 'block';
@@ -3588,7 +3786,7 @@
       if (boardTab === 'session') {
         if (!isHost) return;
         sessionRecords = [];
-        clientConns.forEach(c => netSend(c, { type: 'SESSION', session: sessionRecords }));
+        joinedConns().forEach(c => netSend(c, { type: 'SESSION', session: sessionRecords }));
       } else {
         if (!window.confirm('Apagar todo o histórico de partidas guardado neste aparelho?')) return;
         Store.remove(HISTORY_KEY);
@@ -3736,11 +3934,17 @@
     document.getElementById('btn-leave').addEventListener('click', returnToLobbyScreen);
     document.getElementById('btn-play-again').addEventListener('click', returnToLobbyScreen);
 
-    NetLog.log('app_start', { version: AppConfig.VERSION, build: AppConfig.BUILD, device: getDeviceId().slice(-6), viaInvite: /[?&]sala=\d{4}/.test(location.search) });
+    NetLog.log('app_start', { version: AppConfig.VERSION, build: AppConfig.BUILD, device: getDeviceId().slice(-6), viaInvite: /[?&]sala=/.test(location.search), env: AppConfig.ENV, protocol: AppConfig.PROTOCOL });
     // Mostra a versão/build no topo do lobby (ajuda a saber qual versão o celular está rodando)
     (() => {
       const p = document.querySelector('.brand-title-wrap p');
-      if (p) p.textContent = `${AppConfig.VERSION} · build ${AppConfig.BUILD} · P2P Mobile & Desktop`;
+      if (p) p.textContent = `build ${AppConfig.BUILD} · P2P Mobile & Desktop`;
+      // Selo BETA / LOCAL: deixa claro que não é a versão oficial (salas separadas)
+      const badge = document.getElementById('lbl-env-badge');
+      if (badge && AppConfig.ENV !== 'prod') {
+        badge.textContent = AppConfig.ENV === 'beta' ? 'BETA' : 'LOCAL';
+        badge.hidden = false;
+      }
     })();
     // Mantém o resumo do log atualizado enquanto o lobby está aberto
     setInterval(() => {

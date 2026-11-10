@@ -70,7 +70,19 @@
       VERSION: 'shithead-mobile-v5',
       // Build publicado: data + número da publicação do dia. Atualizar a cada publicação
       // no GitHub para os logs dizerem exatamente qual código estava rodando.
-      BUILD: '2026-11-09.7',
+      BUILD: '2026-11-10.1',
+      // Versão do formato das mensagens entre aparelhos. Mudou o formato? Some 1:
+      // o host pede para quem estiver com a versão antiga atualizar a página.
+      PROTOCOL: 2,
+      // Onde o jogo está rodando: 'prod' (GitHub Pages oficial), 'beta' (repositório
+      // de testes, endereço termina em -beta) ou 'local' (computador de desenvolvimento).
+      // Beta e local usam salas separadas das oficiais.
+      ENV: (() => {
+        const h = location.hostname;
+        if (/-beta(\/|$)/.test(location.pathname)) return 'beta';
+        if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h.endsWith('.localhost')) return 'local';
+        return 'prod';
+      })(),
       MAX_IMAGE_BYTES: 25 * 1024 * 1024, // 25 MB na entrada (fotos de celular passam de 5 MB); vira 96x96
       AVATAR_SIZE: 96,
       ALLOWED_MIMES: ['image/jpeg', 'image/png', 'image/webp'],
@@ -507,6 +519,43 @@
       return { log, count, get, clear, environment };
     })();
 
+    // Erros inesperados do JavaScript vão para o log de conexão (antes só apareciam no console).
+    // Passam pelo mesmo filtro de privacidade; no máximo 20 por abertura, para um erro em laço
+    // não encher o log.
+    (() => {
+      let errCount = 0;
+      const screen = () => {
+        const s = document.querySelector('.screen.active');
+        return s ? s.id : null;
+      };
+      const record = (kind, msg, file, line, col) => {
+        if (++errCount > 20) return;
+        try {
+          NetLog.log(kind, {
+            msg: String(msg || '').slice(0, 120),
+            file: String(file || '').split(/[\\/]/).pop().split('?')[0].slice(0, 40) || null,
+            line: Number(line) || null,
+            col: Number(col) || null,
+            screen: screen(),
+            build: AppConfig.BUILD
+          });
+          NetLog.count(kind);
+        } catch (e) { /* o registro de erro nunca pode causar outro erro */ }
+      };
+      window.addEventListener('error', (e) => {
+        if (e && e.target && e.target !== window && e.target.tagName) {
+          // Falha ao carregar um arquivo (script, imagem)
+          record('load_error', e.target.tagName.toLowerCase(), e.target.src || e.target.href, null, null);
+          return;
+        }
+        record('js_error', e && e.message, e && e.filename, e && e.lineno, e && e.colno);
+      }, true);
+      window.addEventListener('unhandledrejection', (e) => {
+        const r = e && e.reason;
+        record('js_rejection', r && (r.message || r.type || String(r)), r && r.fileName, r && r.lineNumber, null);
+      });
+    })();
+
     /* ==========================================================================
        4. MOTOR DE EFEITOS SONOROS WEB AUDIO (SoundEngine)
        ========================================================================== */
@@ -873,14 +922,44 @@
        5. MOTOR DE REGRAS E BARALHO (RulesEngine)
        ========================================================================== */
     const RulesEngine = (() => {
+      // Número aleatório criptográfico em [0, n): sem previsibilidade no embaralhamento
+      function randInt(n) {
+        if (window.crypto && crypto.getRandomValues) {
+          const buf = new Uint32Array(1);
+          const limit = Math.floor(0x100000000 / n) * n; // descarta a sobra para não viciar
+          do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+          return buf[0] % n;
+        }
+        return Math.floor(Math.random() * n);
+      }
+
+      // Identificador sorteado ("k" + 7 caracteres): não revela o valor da carta.
+      // Antes os ids eram c_1, c_2... na ordem do baralho, o que entregava cada carta.
+      const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      function randomCardId(used) {
+        let id;
+        do {
+          id = 'k';
+          for (let i = 0; i < 7; i++) id += ID_CHARS[randInt(ID_CHARS.length)];
+        } while (used.has(id));
+        used.add(id);
+        return id;
+      }
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const k = randInt(i + 1);
+          [arr[i], arr[k]] = [arr[k], arr[i]];
+        }
+        return arr;
+      }
+
       function buildDeck(rules) {
         const deck = [];
-        let uid = 1;
         for (let d = 0; d < rules.decks; d++) {
           for (const suit of AppConfig.SUITS) {
             for (const r of AppConfig.RANKS) {
               deck.push({
-                id: 'c_' + (uid++),
                 label: r.label,
                 val: r.val,
                 suit,
@@ -892,7 +971,6 @@
         }
         for (let j = 0; j < rules.jokers; j++) {
           deck.push({
-            id: 'j_' + (uid++),
             label: 'JOKER',
             val: 16,
             suit: '★',
@@ -900,10 +978,10 @@
             isJoker: true
           });
         }
-        for (let i = deck.length - 1; i > 0; i--) {
-          const k = Math.floor(Math.random() * (i + 1));
-          [deck[i], deck[k]] = [deck[k], deck[i]];
-        }
+        shuffle(deck);
+        // Os ids são dados depois de embaralhar e são sorteados
+        const used = new Set();
+        deck.forEach(c => { c.id = randomCardId(used); });
         return deck;
       }
 
@@ -986,6 +1064,7 @@
 
       return {
         buildDeck,
+        randInt,
         isCardPlayable,
         hasJokerInDiscard,
         hasAnyPlayableMove,

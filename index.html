@@ -6,12 +6,16 @@
   <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="application-name" content="shithead-mobile-v5" />
-  <title>Shithead! Mobile v5</title>
+  <meta name="application-name" content="Shithead!" />
+  <!-- Política de segurança: scripts só deste site; conexões só com o servidor de salas.
+       Estilos ainda aceitam "inline" (há estilos dentro do HTML e do JavaScript).
+       Os canais WebRTC entre aparelhos não são cobertos por esta política. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>Shithead!</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="vendor/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -37,8 +41,8 @@
     <div id="screen-lobby" class="screen active">
       <div class="brand-header">
         <div class="brand-title-wrap">
-          <h1>SHITHEAD! <span style="font-size:0.78rem; color:var(--cyan);">v5</span></h1>
-          <p>shithead-mobile-v5 &bull; P2P Mobile &amp; Desktop</p>
+          <h1>SHITHEAD! <span id="lbl-env-badge" class="env-badge" hidden></span></h1>
+          <p>P2P Mobile &amp; Desktop</p>
         </div>
         <button id="btn-mute-lobby" class="btn btn-secondary" style="padding:7px 11px; font-size:0.8rem;">🔊 Som</button>
       </div>
@@ -50,7 +54,7 @@
           <div class="avatar-preview-wrap">
             <img id="img-my-avatar" class="avatar-img" alt="Avatar" />
             <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-              <input type="text" id="inp-name" maxlength="14" placeholder="Seu Nome" />
+              <input type="text" id="inp-name" maxlength="24" placeholder="Seu Nome" />
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button id="btn-camera-photo" class="btn btn-secondary" style="padding:5px 10px; font-size:0.75rem;">📷 Câmera</button>
                 <button id="btn-gallery-photo" class="btn btn-secondary" style="padding:5px 10px; font-size:0.75rem;">📁 Arquivo</button>
@@ -76,7 +80,7 @@
               🎉 Você foi convidado para a sala <b id="lbl-invite-code">----</b>! Confira seu nome e foto acima — o host vê as mudanças na hora.
             </div>
             <div class="row">
-              <input type="text" id="inp-room-code" inputmode="numeric" maxlength="4" placeholder="Código da sala (ex: 4829)" style="flex:1;" />
+              <input type="text" id="inp-room-code" class="room-code-input" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="7" placeholder="Código da sala (ex: KX7RD)" style="flex:1;" />
               <button id="btn-connect-peer" class="btn btn-success">Entrar</button>
             </div>
             <div id="join-net-status" class="net-status" style="display:none;"></div>
@@ -87,6 +91,7 @@
             <div id="qr-container"></div>
             <div id="lbl-invite-url" class="invite-url"></div>
             <button id="btn-share-invite" class="btn btn-success" style="width:100%;">📤 Enviar convite (WhatsApp, etc.)</button>
+            <button id="btn-lock-room" class="btn btn-secondary" style="width:100%;" aria-pressed="false">🔓 Sala aberta — toque para trancar</button>
             <div style="font-size:0.72rem; color:var(--text-dim); text-align:center;">Quem abrir o link ou ler o QR Code com a câmera entra direto na sala.</div>
             <div id="host-net-status" class="net-status" style="display:none;"></div>
           </div>

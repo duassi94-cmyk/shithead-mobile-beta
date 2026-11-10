@@ -391,6 +391,13 @@
       border-radius: 8px;
       padding: 8px 10px;
     }
+    /* Selo BETA / LOCAL ao lado do nome (versões de teste, com salas separadas) */
+    .env-badge { font-size: 0.62rem; letter-spacing: 1px; vertical-align: middle; padding: 2px 7px; border-radius: 99px; background: var(--cyan); color: #0f172a; -webkit-text-fill-color: #0f172a; -webkit-background-clip: border-box; background-clip: border-box; }
+    .env-badge[hidden] { display: none; }
+    /* Código da sala: letras maiúsculas espaçadas, fácil de ler em voz alta */
+    .room-code-input { text-transform: uppercase; letter-spacing: 3px; font-weight: 700; }
+    .room-code-input::placeholder { text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .btn.btn-locked { background: rgba(245, 158, 11, 0.2); border: 1px solid var(--accent); color: #fde68a; }
     .invite-url {
       font-size: 0.7rem;
       color: var(--cyan);

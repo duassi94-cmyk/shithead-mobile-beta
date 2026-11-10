@@ -1,8 +1,8 @@
 {
   "id": "shithead-mobile-v5",
-  "name": "Shithead! Mobile v5",
-  "short_name": "Shithead v5",
-  "description": "Jogo de cartas multiplayer P2P mobile e desktop (shithead-mobile-v5).",
+  "name": "Shithead!",
+  "short_name": "Shithead!",
+  "description": "Jogo de cartas Shithead para jogar com amigos ou contra bots, no celular e no computador.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
