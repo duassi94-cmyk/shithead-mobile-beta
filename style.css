@@ -1246,7 +1246,7 @@
       animation: dormiuPop 1.8s ease-out forwards;
       z-index: 35;
     }
-    .dormiu-burst small { display: block; font-size: 0.62rem; font-weight: 700; opacity: 0.9; text-align: center; }
+    .dormiu-burst small { display: block; font-size: var(--fs-min); font-weight: 700; opacity: 0.9; text-align: center; }
     .dormiu-burst.dormiu-me { font-size: 1.8rem; top: 45% !important; animation-duration: 2.6s; }
     @keyframes dormiuPop {
       0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5) rotate(-6deg); }
@@ -2010,4 +2010,35 @@
     @media (max-width: 360px) {
       .clock-chip { min-width: 2.4em; padding: 4px 6px; }
       .clock-chip::before { content: none; }
+    }
+
+    /* ===== Painel ao lado da mesa (telas largas; Ajustes → Aparência → Painel) =====
+       A mesma caixa da janela do ⋯ (placar, jogadas, regras) vira uma coluna fixa à direita. */
+    @media (min-width: 1100px) and (min-height: 600px) {
+      html:not([data-panel="off"]) .app-shell { max-width: 1320px; }
+      html:not([data-panel="off"]) #screen-game.active {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-rows: auto minmax(0, 1fr);
+        column-gap: 14px;
+        row-gap: 5px;
+      }
+      html:not([data-panel="off"]) #screen-game > .top-bar { grid-column: 1 / -1; grid-row: 1; }
+      html:not([data-panel="off"]) #screen-game > .game-body { grid-column: 1; grid-row: 2; }
+      html:not([data-panel="off"]) #board-overlay {
+        display: flex;
+        position: static;
+        inset: auto;
+        grid-column: 2;
+        grid-row: 2;
+        min-height: 0;
+        padding: 0 0 6px;
+        background: none;
+        z-index: auto;
+      }
+      html:not([data-panel="off"]) #board-overlay .card-box { max-width: none; height: 100%; overflow-y: auto; }
+      html:not([data-panel="off"]) #btn-board-close { display: none; }
+      /* no painel, as três abas dividem a largura */
+      html:not([data-panel="off"]) #board-overlay .board-tabs { flex: 1; }
+      html:not([data-panel="off"]) #board-overlay .board-tab { flex: 1; }
     }

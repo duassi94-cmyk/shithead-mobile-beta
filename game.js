@@ -3916,7 +3916,37 @@
         document.getElementById('overlay-rules-list').innerHTML = G && G.rules ? rulesListHtml(G.rules) : '<li>Sem partida em andamento.</li>';
       }
     }
-    document.querySelectorAll('[data-overlay-tab]').forEach(b => b.addEventListener('click', () => setOverlayTab(b.dataset.overlayTab)));
+    document.querySelectorAll('[data-overlay-tab]').forEach(b => b.addEventListener('click', () => {
+      dockTabChosen = true;
+      if (b.dataset.overlayTab === 'board') renderBoardOverlay();
+      setOverlayTab(b.dataset.overlayTab);
+    }));
+
+    /* ---- Painel lateral (telas largas): placar, jogadas e regras sempre à vista ----------
+       Mesma caixa da janela do ⋯; em telas a partir de 1100×600 (e com o painel ligado em
+       Ajustes) ela fica fixa ao lado da mesa, sem fundo escuro e sem "Fechar". */
+    const PANEL_MQ = window.matchMedia('(min-width: 1100px) and (min-height: 600px)');
+    let dockTabChosen = false;
+    function boardDocked() {
+      return document.documentElement.dataset.panel !== 'off' && PANEL_MQ.matches;
+    }
+    function syncBoardDock() {
+      const ov = document.getElementById('board-overlay');
+      const docked = boardDocked();
+      ov.classList.toggle('docked', docked);
+      // Fixo é uma região da página, não uma janela por cima
+      ov.setAttribute('role', docked ? 'complementary' : 'dialog');
+      if (docked) { ov.removeAttribute('aria-modal'); ov.classList.remove('show'); }
+      else ov.setAttribute('aria-modal', 'true');
+      if (docked && !dockTabChosen) { dockTabChosen = true; setOverlayTab('history'); } // na partida, jogadas
+    }
+    function openBoard(tab) {
+      dockTabChosen = true;
+      setOverlayTab(tab);
+      if (!boardDocked()) document.getElementById('board-overlay').classList.add('show');
+      document.querySelector(`[data-overlay-tab="${tab}"]`).focus();
+    }
+    PANEL_MQ.addEventListener?.('change', () => { syncBoardDock(); if (G) renderGame(); });
 
     /* ---- Jogadas: histórico público da partida (o mais recente em cima) -------------- */
     function renderHistoryList() {
@@ -3934,8 +3964,13 @@
     }
     // Aba aberta durante a partida: acompanha as jogadas novas
     function refreshHistoryIfOpen() {
+      syncBoardDock();
       const ov = document.getElementById('board-overlay');
-      if (ov.classList.contains('show') && !document.getElementById('overlay-pane-history').hidden) renderHistoryList();
+      if (!ov.classList.contains('show') && !boardDocked()) return;
+      // A aba à vista acompanha a partida (no painel fixo, as três)
+      if (!document.getElementById('overlay-pane-history').hidden) renderHistoryList();
+      else if (!document.getElementById('overlay-pane-board').hidden) renderBoardOverlay();
+      else setOverlayTab('rules');
     }
 
     /* ---- Ajustes: instalar no celular, diagnóstico, versão --------------------------- */
@@ -3994,6 +4029,7 @@
       Aparencia.set(b.dataset.look, b.dataset.value);
       SoundEngine.select();
       renderLookBox();
+      if (b.dataset.look === 'panel') syncBoardDock();
     });
 
     function renderSettingsView() {
@@ -4027,20 +4063,10 @@
     }
     document.getElementById('btn-board-game').addEventListener('click', () => {
       renderBoardOverlay();
-      setOverlayTab('board');
-      document.getElementById('board-overlay').classList.add('show');
-      document.querySelector('[data-overlay-tab="board"]').focus();
+      openBoard('board');
     });
-    document.getElementById('btn-history-game').addEventListener('click', () => {
-      setOverlayTab('history');
-      document.getElementById('board-overlay').classList.add('show');
-      document.querySelector('[data-overlay-tab="history"]').focus();
-    });
-    document.getElementById('btn-rules-game').addEventListener('click', () => {
-      setOverlayTab('rules');
-      document.getElementById('board-overlay').classList.add('show');
-      document.querySelector('[data-overlay-tab="rules"]').focus();
-    });
+    document.getElementById('btn-history-game').addEventListener('click', () => openBoard('history'));
+    document.getElementById('btn-rules-game').addEventListener('click', () => openBoard('rules'));
     // Menu ⋯ da mesa: abre embaixo do botão; fecha ao escolher um item, ao tocar fora ou com Esc
     const gameMenu = document.getElementById('game-menu');
     const gameMenuBtn = document.getElementById('btn-game-menu');

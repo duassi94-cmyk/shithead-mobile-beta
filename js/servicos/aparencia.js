@@ -5,7 +5,8 @@
    APARÊNCIA (só neste aparelho; nada vai pela rede)
    - naipes: 2 cores (♥♦ vermelhos) ou 4 cores (♦ azul, ♣ verde)
    - verso das cartas e cor do feltro da mesa
-   Aplicada como atributos na raiz da página (data-suits, data-back, data-felt);
+   - painel lateral (placar, jogadas, regras) fixo ao lado da mesa em telas largas
+   Aplicada como atributos na raiz da página (data-suits, data-back, data-felt, data-panel);
    o style.css troca as cores por variáveis. Valores fora da lista voltam ao padrão.
    ========================================================================== */
 import { Store } from './armazenamento.js';
@@ -14,9 +15,10 @@ const KEY = 'sh_look';
 const OPTIONS = {
   suits: ['2', '4'],
   back: ['red', 'blue', 'green', 'black'],
-  felt: ['green', 'blue', 'wine']
+  felt: ['green', 'blue', 'wine'],
+  panel: ['on', 'off']
 };
-const DEFAULTS = { suits: '2', back: 'red', felt: 'green' };
+const DEFAULTS = { suits: '2', back: 'red', felt: 'green', panel: 'on' };
 
 function get() {
   let saved = {};
@@ -31,6 +33,7 @@ function apply(look = get()) {
   root.dataset.suits = look.suits;
   root.dataset.back = look.back;
   root.dataset.felt = look.felt;
+  root.dataset.panel = look.panel;
 }
 
 function set(key, value) {
