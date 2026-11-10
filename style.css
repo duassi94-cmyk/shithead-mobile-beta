@@ -1737,7 +1737,8 @@
       .slot-left-bot select { font-size: 0.74rem; padding: 4px 4px; }
     }
 
-    /* ===== Reações na lateral direita: visíveis mesmo com a mão ampliada ===== */
+    /* ===== Reações na lateral (direita; esquerda com "mão à esquerda"; deitado: duas colunas):
+       visíveis mesmo com a mão ampliada ===== */
     .game-body { display: flex; flex: 1 1 auto; min-height: 0; gap: 5px; }
     .game-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
     .reaction-bar {

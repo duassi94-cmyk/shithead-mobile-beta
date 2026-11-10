@@ -6,7 +6,7 @@
    O jogo está migrando por partes para módulos ES (js/):
      config.js            AppConfig (versão, build, ambiente, cartas, bots)
      servicos/            armazenamento (Store, LogDB), avatar, log de partidas,
-                          log de conexão (+ captura de erros), som
+                          log de conexão (+ captura de erros), som, aparência (Aparencia)
      nucleo/              sorteio (semente, impressão digital), regras, motor (Core),
                           histórico público de jogadas (PlayHistory)
      bots/ia.js           IA dos bots

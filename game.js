@@ -2865,6 +2865,9 @@
 
     /* ==========================================================================
        11. RENDERIZAÇÃO: MESA REDONDA, PILHAS 3D, PLACAR E FIM DE JOGO
+       Aqui se calcula o que mostrar; faixa de ordem, assentos, monte, queimadas, mão,
+       miniatura e suas cartas da mesa são desenhados pelos componentes de
+       js/mesa/componentes.js (Preact + htm), que só mexem no que mudou.
        ========================================================================== */
     // 💀 -X ao lado de cada jogador: derrotas nesta sessão da sala
     function scoreFor(player) {
@@ -3145,7 +3148,7 @@
       refreshHistoryIfOpen();
       renderClock();
 
-      // Botão ⏩: aparece quando você já escapou (ou na simulação)
+      // ⏩ "Acelerar até o fim" (menu ⋯, com um pontinho no ⋯): aparece quando você já escapou (ou na simulação)
       const turboBtn = document.getElementById('btn-turbo');
       // ⏩ liberado na simulação ou quando todos que ainda têm cartas são bots (host ou convidado)
       const turboOn = turboMode || !!G.turbo;
@@ -4075,7 +4078,7 @@
        ========================================================================== */
     document.getElementById('btn-mute-lobby').addEventListener('click', () => SoundEngine.toggleMute());
     document.getElementById('btn-mute-game').addEventListener('click', () => SoundEngine.toggleMute());
-    // 🏆 na mesa: placar da sessão (bots aparecem à parte, fora do ranking)
+    // Placar da sessão na mesa (menu ⋯ ou painel lateral; bots aparecem à parte, fora do ranking)
     function renderBoardOverlay() {
       const list = document.getElementById('board-overlay-list');
       list.innerHTML = leaderboardHtml(sessionRecords, 'Nenhuma partida terminada nesta sessão ainda.', true);

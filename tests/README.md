@@ -1,7 +1,7 @@
 # Testes do Shithead! Mobile
 
 Ferramentas para rodar no navegador, com o jogo servido localmente
-(`py -m http.server 8765` na pasta do repositório). Nenhuma delas é carregada
+(`python3 -m http.server 8765` na pasta do repositório; no Windows, `py -m http.server 8765`). Nenhuma delas é carregada
 pelo `index.html`: são abertas só durante os testes.
 
 Desde a build 2026-11-10.8 o motor, a IA e os serviços são módulos ES em `js/`
@@ -12,7 +12,7 @@ continuam funcionando do mesmo jeito.
 | Arquivo | Para que serve |
 |---|---|
 | `sim-harness.js` | Roda partidas só entre bots, sem tela e sem som, e confere se nenhuma carta some ou duplica. Use numa aba do jogo (não na que você usa para jogar). |
-| `layout-test.js` | Confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela: `await __run()` (mesa, incluindo texto ≥ 11 px e botões ≥ 44 px, com o menu ⋯ aberto; com o celular deitado — a partir de 640 px de largura — confere a coluna da mão ao lado do feltro) e `await __lobby()` (telas de entrada: Início, Convite, Sala, Placar, Ajustes; inclui alvos de toque ≥ 44 px). Desliga a gravação no armazenamento do navegador da aba. |
+| `layout-test.js` | Confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela: `await __run()` (mesa, incluindo texto ≥ 11 px e botões ≥ 44 px, com o menu ⋯ aberto; com o celular deitado — a partir de 640 px de largura — confere a coluna da mão ao lado do feltro) e `await __lobby()` (telas de entrada: Início, Convite, Sala, Placar, Ajustes; inclui alvos de toque ≥ 44 px). `await __shift(20000)` joga uma partida automática e lista o que mudou de lugar durante ela (o esperado é só a faixa de status variar de largura). Desliga a gravação no armazenamento do navegador da aba. Vale rodar também com a aparência trocada (4 cores, painel, mão à esquerda: Ajustes → Aparência). |
 | `make-icons.py` | Gera os ícones PNG do app (`icons/`) sem bibliotecas externas: `py tests/make-icons.py`. O mesmo desenho está em `icons/icon.svg`. |
 | `security-check.js` | Age como um aparelho estranho contra uma sala aberta: versão antiga, mensagem sem entrar, id inválido e excesso de mensagens. |
 | `replay.js` | Reproduz uma partida a partir do log (semente + ações) e confere a distribuição, as impressões digitais da mesa, cada jogada e o final. |
@@ -72,6 +72,16 @@ O host grava a partida em andamento (`sh_host_resume`, 30 min). Para testar à m
 3. No host, toque em "Retomar partida": a mesma sala reabre (se o servidor ainda segurar o
    código, o host tenta de novo em 3, 5, 10... s) e o convidado volta para o próprio lugar.
 4. No fim, `Replay.fromSaved()` no host deve dar `ok: true` (o log continua na mesma partida).
+
+## Cronômetro
+
+Só o host mede o tempo (`G.turnEndsAt`); os convidados recebem quanto falta (`turnMsLeft`) a cada
+atualização da mesa. Para testar à mão: na personalização das regras, escolha 15 s e o que acontece
+no fim (bot joga, recolhe o monte ou só aviso); comece uma partida e não toque em nada.
+1. Na troca, aos 15 s quem não tocou em Pronto fica pronto (no modo "só aviso", nada acontece).
+2. Na sua vez, aos 15 s a jogada é feita sozinha: a faixa mostra "⏰ Tempo esgotado!" e o histórico
+   (menu ⋯ → Jogadas) marca "(tempo esgotado)". Com um convidado, quem joga por ele é o host.
+3. Jogar antes do fim zera o relógio; simulação e tutorial não têm cronômetro.
 
 ## Simulação
 
