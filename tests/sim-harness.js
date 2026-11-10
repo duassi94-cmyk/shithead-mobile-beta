@@ -7,7 +7,7 @@
 //   SimHarness.out / SimHarness.viol -> resultados / violações (cartas perdidas ou duplicadas)
 window.SimHarness = (() => {
   Object.keys(SoundEngine).forEach(k => { if (typeof SoundEngine[k] === 'function') SoundEngine[k] = () => {}; });
-  ['initNewSession', 'startMatchLog', 'logSwap', 'logTurn', 'logMatchEnd', 'setMatchMode'].forEach(k => { LoggerModule[k] = () => {}; });
+  ['initNewSession', 'startMatchLog', 'logSwap', 'logTurn', 'logAction', 'logCheck', 'logMatchEnd', 'setMatchMode'].forEach(k => { LoggerModule[k] = () => {}; });
   window.renderGame = () => {};
   window.triggerFlightVisual = () => {};
   window.showReaction = () => {};
@@ -24,14 +24,18 @@ window.SimHarness = (() => {
   let done = false;
   const countAll = () => G.deck.length + G.discard.length + (G.burnedCount || 0) +
     G.players.reduce((s, p) => s + p.hand.length + p.open.length + p.closed.length, 0);
-  const origAdvance = window.advanceTurn;
-  window.advanceTurn = (...a) => {
-    const ids = [...G.deck, ...G.discard, ...G.players.flatMap(p => [...p.hand, ...p.open, ...p.closed])].map(c => c.id);
-    const dup = ids.length - new Set(ids).size;
-    const total = countAll();
-    if (total !== G.__initialTotal || dup) viol.push({ cfg: cur, total, expected: G.__initialTotal, dup });
-    G.turns = (G.turns || 0) + 1;
-    return origAdvance(...a);
+  // Confere a cada jogada aplicada pelo motor (core.js) se nenhuma carta sumiu ou duplicou
+  const origApply = Core.apply;
+  Core.apply = (S, pid, action) => {
+    const res = origApply(S, pid, action);
+    if (S === G && res.events.some(e => e.type === 'turnAdvanced' || e.type === 'gameOver')) {
+      const ids = [...G.deck, ...G.discard, ...G.players.flatMap(p => [...p.hand, ...p.open, ...p.closed])].map(c => c.id);
+      const dup = ids.length - new Set(ids).size;
+      const total = countAll();
+      if (total !== G.__initialTotal || dup) viol.push({ cfg: cur, total, expected: G.__initialTotal, dup });
+      G.turns = (G.turns || 0) + 1;
+    }
+    return res;
   };
   const BASE = { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false };
   const setUI = (r) => {

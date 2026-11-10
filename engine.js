@@ -70,7 +70,7 @@
       VERSION: 'shithead-mobile-v5',
       // Build publicado: data + número da publicação do dia. Atualizar a cada publicação
       // no GitHub para os logs dizerem exatamente qual código estava rodando.
-      BUILD: '2026-11-10.1',
+      BUILD: '2026-11-10.4',
       // Versão do formato das mensagens entre aparelhos. Mudou o formato? Some 1:
       // o host pede para quem estiver com a versão antiga atualizar a página.
       PROTOCOL: 2,
@@ -248,7 +248,9 @@
         saveToStorage();
       }
 
-      function startMatchLog(rules, players) {
+      // replayInfo: { seed, mode, lobby } — o necessário para reproduzir a partida.
+      // A semente fica só neste log (no aparelho do host); nunca vai para a rede.
+      function startMatchLog(rules, players, replayInfo = null) {
         if (!sessionData) {
           initNewSession(rules, players);
         }
@@ -272,8 +274,34 @@
           turns: [],
           loser: null
         };
+        // Formato 2 (replay): semente + ordem do lobby + ações aplicadas pelo host, em ordem.
+        // Ações: [ms desde o início, id do jogador, tipo, dados]. Checks: [nº de ações, impressão digital].
+        if (replayInfo && replayInfo.seed) {
+          matchEntry.replay = {
+            format: 2,
+            seed: replayInfo.seed,
+            mode: replayInfo.mode || 'normal',
+            lobby: (replayInfo.lobby || []).map(s => ({ id: s.id, name: s.name, type: s.type, persona: s.persona || null })),
+            actions: [],
+            checks: [],
+            final: null
+          };
+        }
         sessionData.matches.push(matchEntry);
         saveToStorage();
+      }
+
+      function logAction(entry) {
+        const m = currentMatch();
+        if (!m || !m.replay) return;
+        m.replay.actions.push(entry);
+        saveToStorage();
+      }
+
+      function logCheck(count, digest) {
+        const m = currentMatch();
+        if (!m || !m.replay) return;
+        m.replay.checks.push([count, digest]);
       }
 
       function currentMatch() {
@@ -309,11 +337,12 @@
         if (m) { Object.assign(m, { mode }, extra); saveToStorage(); }
       }
 
-      function logMatchEnd(loserName) {
+      function logMatchEnd(loserName, final = null) {
         const m = currentMatch();
         if (!m) return;
         m.loser = loserName;
         m.endedAt = new Date().toISOString();
+        if (m.replay && final) m.replay.final = final;
         saveToStorage();
       }
 
@@ -389,8 +418,11 @@
         startMatchLog,
         logSwap,
         logTurn,
+        logAction,
+        logCheck,
         logMatchEnd,
         setMatchMode,
+        describeRules,
         getSavedSession,
         getExport,
         downloadLastSession
@@ -921,6 +953,61 @@
     /* ==========================================================================
        5. MOTOR DE REGRAS E BARALHO (RulesEngine)
        ========================================================================== */
+    /* ---- Semente e gerador determinístico (Rng) ---------------------------------
+       Cada partida nasce de uma semente secreta (128 bits sorteados com crypto) que
+       fica só no host e no log dele — nunca vai para a rede. A partir dela, um gerador
+       determinístico (sfc32) embaralha o baralho, sorteia os ids das cartas e os
+       lugares. Com a semente e a lista de ações gravadas no log, qualquer partida
+       pode ser reproduzida jogada a jogada (ferramenta tests/replay.js). */
+    const Rng = (() => {
+      function newSeed() {
+        const a = new Uint32Array(4);
+        if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+        else for (let i = 0; i < 4; i++) a[i] = Math.floor(Math.random() * 0x100000000);
+        return Array.from(a, x => x.toString(16).padStart(8, '0')).join('');
+      }
+      function isSeed(s) { return typeof s === 'string' && /^[0-9a-f]{32}$/.test(s); }
+      function create(seed) {
+        if (!isSeed(seed)) seed = newSeed();
+        let a = parseInt(seed.slice(0, 8), 16) >>> 0;
+        let b = parseInt(seed.slice(8, 16), 16) >>> 0;
+        let c = parseInt(seed.slice(16, 24), 16) >>> 0;
+        let d = parseInt(seed.slice(24, 32), 16) >>> 0;
+        function next() {
+          a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+          let t = (a + b) | 0;
+          a = b ^ (b >>> 9);
+          b = (c + (c << 3)) | 0;
+          c = (c << 21) | (c >>> 11);
+          d = (d + 1) | 0;
+          t = (t + d) | 0;
+          c = (c + t) | 0;
+          return (t >>> 0) / 4294967296;
+        }
+        for (let i = 0; i < 15; i++) next(); // aquece o gerador
+        return { seed, next, int: (n) => Math.floor(next() * n) };
+      }
+      return { newSeed, isSeed, create };
+    })();
+
+    // "Impressão digital" da mesa: resume onde está cada carta, de quem é a vez, o sentido
+    // e a fase. Gravada no log a cada 20 ações e no fim; o replay recalcula e compara.
+    function stateDigest(state) {
+      if (!state) return null;
+      const ids = (arr) => (arr || []).map(c => c.id).join(',');
+      const parts = [
+        state.phase, state.turnIdx, state.direction, state.burnedCount || 0,
+        ids(state.deck), ids(state.discard),
+        ...state.players.map(p => `${p.id}|${p.escaped ? 1 : 0}|${ids(p.hand)}|${ids(p.open)}|${ids(p.closed)}`)
+      ].join('#');
+      let h = 0x811c9dc5; // FNV-1a 32 bits
+      for (let i = 0; i < parts.length; i++) {
+        h ^= parts.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      return h.toString(16).padStart(8, '0');
+    }
+
     const RulesEngine = (() => {
       // Número aleatório criptográfico em [0, n): sem previsibilidade no embaralhamento
       function randInt(n) {
@@ -936,25 +1023,26 @@
       // Identificador sorteado ("k" + 7 caracteres): não revela o valor da carta.
       // Antes os ids eram c_1, c_2... na ordem do baralho, o que entregava cada carta.
       const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      function randomCardId(used) {
+      function randomCardId(used, rng) {
         let id;
         do {
           id = 'k';
-          for (let i = 0; i < 7; i++) id += ID_CHARS[randInt(ID_CHARS.length)];
+          for (let i = 0; i < 7; i++) id += ID_CHARS[rng.int(ID_CHARS.length)];
         } while (used.has(id));
         used.add(id);
         return id;
       }
 
-      function shuffle(arr) {
+      function shuffle(arr, rng) {
         for (let i = arr.length - 1; i > 0; i--) {
-          const k = randInt(i + 1);
+          const k = rng.int(i + 1);
           [arr[i], arr[k]] = [arr[k], arr[i]];
         }
         return arr;
       }
 
-      function buildDeck(rules) {
+      // rng: gerador da partida (Rng.create(semente)). Sem ele, usa uma semente nova.
+      function buildDeck(rules, rng = Rng.create()) {
         const deck = [];
         for (let d = 0; d < rules.decks; d++) {
           for (const suit of AppConfig.SUITS) {
@@ -978,10 +1066,10 @@
             isJoker: true
           });
         }
-        shuffle(deck);
+        shuffle(deck, rng);
         // Os ids são dados depois de embaralhar e são sorteados
         const used = new Set();
-        deck.forEach(c => { c.id = randomCardId(used); });
+        deck.forEach(c => { c.id = randomCardId(used, rng); });
         return deck;
       }
 

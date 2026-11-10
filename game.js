@@ -1003,8 +1003,10 @@
       if (gp) {
         gp.type = 'bot';
         gp.persona = 'medium';
-        gp.readySwap = true;
+        markReadyByTakeover(gp);
         gp.disconnected = true;
+        // Na preparação, se todos os outros já estavam prontos, a partida começa
+        if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
         broadcastState();
         scheduleBotIfNeeded();
       }
@@ -1224,7 +1226,8 @@
 
     setInterval(() => {
       if (isHost && clientConns.length) {
-        const ping = { type: 'PING', inGame: hostInGame(), version: G ? (G.version || 0) : 0, protocol: AppConfig.PROTOCOL, t: Date.now() };
+        // over: a partida terminou e o host ainda está na tela de fim de jogo
+        const ping = { type: 'PING', inGame: hostInGame(), over: !!(G && G.phase === 'GAMEOVER'), version: G ? (G.version || 0) : 0, protocol: AppConfig.PROTOCOL, t: Date.now() };
         clientConns.forEach(c => { if (c.__playerId) netSend(c, ping); });
       }
       // 30 s de folga: navegadores "freiam" timers de abas em segundo plano no host
@@ -1240,7 +1243,11 @@
       if (gap > 8000) nlog('ping_gap', { gapS: Math.round(gap / 1000), hidden: document.hidden });
       lastHostPingAt = Date.now();
       const inGameHere = document.getElementById('screen-game').classList.contains('active');
-      const behind = ping.inGame && (!G || !inGameHere || (G.version || 0) < ping.version);
+      // Partida terminada e eu já saí para a sala: fico na sala (antes o pulso me puxava de
+      // volta para a tela de fim de jogo enquanto o host continuava nela).
+      // Se eu ainda estou na mesa e perdi o resultado final, peço a mesa de novo.
+      const leftAfterEnd = ping.over && !inGameHere;
+      const behind = ping.inGame && !leftAfterEnd && (!G || !inGameHere || (G.version || 0) < ping.version);
       if (behind && Date.now() - lastResyncAt > 2000) {
         lastResyncAt = Date.now();
         nlog('resync_sent', { localV: G ? (G.version || 0) : null, hostV: ping.version, inGameHere });
@@ -1432,7 +1439,7 @@
         const p = G.players.find(pl => pl.id === pid);
         p.type = 'bot';
         p.persona = 'medium';
-        p.readySwap = true;
+        markReadyByTakeover(p);
         p.disconnected = true;
         G.bannerText = `${p.name} caiu — um bot está jogando por ele(a) até voltar.`;
         if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
@@ -1774,7 +1781,8 @@
         const avatar = sanitizeAvatar(data.avatar);
 
         // Voltando para uma partida em andamento: devolve o lugar
-        const gp = G && G.phase !== 'ABANDONED' ? G.players.find(p => p.id === data.id) : null;
+        // (partida já terminada não conta: quem volta fica na sala, sem reabrir a mesa)
+        const gp = G && G.phase !== 'ABANDONED' && G.phase !== 'GAMEOVER' ? G.players.find(p => p.id === data.id) : null;
         if (gp) {
           gp.type = 'human';
           gp.persona = null;
@@ -1810,8 +1818,10 @@
         if (roomLocked) netSend(conn, { type: 'LOBBY_LOCK', locked: true });
         setNetStatus('host-net-status', `${name} entrou na sala!`, 'ok');
         SoundEngine.select();
-        // Quem entra durante uma partida recebe a mesa atual (como espectador se não estiver nela)
-        if (G && G.phase !== 'ABANDONED' && document.getElementById('screen-game').classList.contains('active')) {
+        // Quem entra durante uma partida recebe a mesa atual (como espectador se não estiver nela).
+        // Partida já terminada: não manda (quem reconecta da sala fica na sala; quem ainda estava
+        // na mesa e perdeu o fim recebe o resultado pelo pulso, que pede a mesa de novo).
+        if (G && G.phase !== 'ABANDONED' && G.phase !== 'GAMEOVER' && document.getElementById('screen-game').classList.contains('active')) {
           netSend(conn, { type: 'STATE_SYNC', state: stateForNet(conn.__playerId), fx: null });
         }
       } else if (data.type === 'PROFILE') {
@@ -1887,7 +1897,7 @@
         // Host com outra versão do formato das mensagens: não dá para continuar
         if (Number(data.protocol) !== AppConfig.PROTOCOL) { handleVersionMismatch(Number(data.protocol) || 0, null); return; }
         if (hostConn && hostConn.open && Number.isFinite(Number(data.t))) netSend(hostConn, { type: 'PONG', t: Number(data.t) });
-        handlePing({ inGame: !!data.inGame, version: Number(data.version) || 0 });
+        handlePing({ inGame: !!data.inGame, over: !!data.over, version: Number(data.version) || 0 });
       } else if (data.type === 'UPDATE_REQUIRED') {
         handleVersionMismatch(Number(data.protocol) || 0, typeof data.build === 'string' ? data.build.slice(0, 20) : null);
       } else if (data.type === 'ROOM_LOCKED') {
@@ -2025,102 +2035,72 @@
       return lobbySlots.map(s => ({ ...s }));
     }
 
-    // Tutorial: baralho combinado para as cartas especiais aparecerem logo
-    function rigTutorialDeck(deck) {
-      const take = (pred) => {
-        const i = deck.findIndex(pred);
-        return i === -1 ? null : deck.splice(i, 1)[0];
-      };
-      const pick = (val) => take(c => !c.isJoker && c.val === val);
-      // Jogador humano (assento 1): fechadas, abertas, mão
-      const humanClosed = [pick(9), pick(5), pick(13)];
-      const humanOpen = [pick(10), pick(14), pick(12)];
-      const humanHand = [pick(3), pick(7), pick(15)];
-      const human = [...humanClosed, ...humanOpen, ...humanHand];
-      // Bots com cartas medianas (sem 3 para o humano começar)
-      const botCards = [];
-      for (let b = 0; b < 2; b++) {
-        botCards.push([pick(4), pick(6), pick(8), pick(11), pick(9), pick(13), pick(5), pick(8), pick(6)]);
+    /* ---- Registro para replay -----------------------------------------------------
+       Toda ação que o host aplica (dele, dos convidados e dos bots) entra no log com o
+       tempo desde o início da partida. A cada 20 ações grava a impressão digital da mesa.
+       Ações que não poderiam valer naquele momento (fora da vez, fase errada) não entram. */
+    let matchStartedAt = 0;
+    let matchActionCount = 0;
+    function compactAction(a) {
+      switch (a.type) {
+        case 'PLAY_CARDS': return { h: a.handIds || [], o: a.openIds || [] };
+        case 'SWAP_CARDS': return { h: a.handId, o: a.openId };
+        case 'PLAY_BLIND': return { c: a.cardId };
+        case 'SPEED_WIN': return { i: a.idx };
+        default: return null;
       }
-      const joker = take(c => c.isJoker);
-      const rest = deck.splice(0);
-      // Coringa e um 10 perto do topo do monte de compra
-      const top = [pick.call(null, 4), joker, rest.find(c => c.val === 10) ? rest.splice(rest.findIndex(c => c.val === 10), 1)[0] : null]
-        .filter(Boolean);
-      const ordered = [...human, ...botCards[0], ...botCards[1], ...top, ...rest].filter(Boolean);
-      deck.push(...ordered);
-      return deck;
+    }
+    function recordReplayAction(playerId, action) {
+      const entry = [Date.now() - matchStartedAt, playerId, action.type];
+      const data = compactAction(action);
+      if (data) entry.push(data);
+      LoggerModule.logAction(entry);
+      matchActionCount++;
+    }
+    // Um bot assumiu o lugar de alguém (caiu ou foi removido): na preparação isso conta
+    // como "pronto" — sem jogada de ninguém — e o replay precisa saber
+    function markReadyByTakeover(p) {
+      if (!G) return;
+      if (G.phase === 'SWAP' && !p.readySwap) recordReplayAction(p.id, { type: 'READY_AUTO' });
+      Core.apply(G, p.id, { type: 'READY_AUTO' });
     }
 
-    function startNewMatch(isRematch = false, mode = null) {
+    function recordReplayCheck() {
+      if (G && matchActionCount > 0 && matchActionCount % 20 === 0) LoggerModule.logCheck(matchActionCount, stateDigest(G));
+    }
+
+    // opts (usado pelo replay): { seed, rules, slots } — sem eles, sorteia uma semente nova
+    // e usa as regras e os lugares do lobby, como sempre.
+    function startNewMatch(isRematch = false, mode = null, opts = {}) {
       if (mode) currentMode = mode;
       turboMode = false;
       coachOpen = false;
       document.getElementById('coach-bubble').classList.remove('show');
       SoundEngine.init();
       SoundEngine.slide();
-      const rules = currentMode === 'tutorial'
+      const rules = opts.rules ? { ...opts.rules } : (currentMode === 'tutorial'
         ? { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, bigPile: 12 }
-        : getRulesFromUI();
-      let deck = RulesEngine.buildDeck(rules);
-      const slots = buildSlotsForMode(currentMode);
-      if (currentMode === 'tutorial') {
-        deck = rigTutorialDeck(deck); // o tutorial conta com você no 1º lugar
-      } else {
-        // Toda partida nova sorteia os lugares na mesa
-        for (let i = slots.length - 1; i > 0; i--) {
-          const k = Math.floor(Math.random() * (i + 1));
-          [slots[i], slots[k]] = [slots[k], slots[i]];
-        }
-      }
-
-      const players = slots.map((slot, idx) => {
-        const closed = deck.splice(0, 3);
-        const open = deck.splice(0, 3);
-        const hand = deck.splice(0, 3);
-        return {
-          id: slot.id,
-          seatNumber: idx + 1,
-          name: slot.name,
-          type: slot.type,
-          persona: slot.persona,
-          avatar: slot.avatar || AvatarModule.getDefaultAvatar(slot.type, slot.persona),
-          closed,
-          open,
-          hand,
-          readySwap: slot.type === 'bot',
-          escaped: false
-        };
+        : getRulesFromUI());
+      // O motor embaralha, sorteia os lugares e distribui. A semente é secreta: fica só no
+      // host e no log dele (nunca entra em G, que vai pela rede).
+      const dealt = Core.deal({
+        rules,
+        slots: opts.slots || buildSlotsForMode(currentMode),
+        seed: Rng.isSeed(opts.seed) ? opts.seed : Rng.newSeed(),
+        mode: currentMode
       });
+      matchStartedAt = Date.now();
+      matchActionCount = 0;
+      const players = dealt.state.players;
+      players.forEach(p => { if (!p.avatar) p.avatar = AvatarModule.getDefaultAvatar(p.type, p.persona); });
 
       if (!isRematch) {
         LoggerModule.initNewSession(rules, players);
       }
-      LoggerModule.startMatchLog(rules, players);
+      LoggerModule.startMatchLog(rules, players, { seed: dealt.seed, mode: currentMode, lobby: dealt.lobby });
       LoggerModule.setMatchMode(currentMode, { online: clientConns.length > 0, guestsConnected: clientConns.length });
 
-      G = {
-        rules,
-        deck,
-        discard: [],
-        discardPlayGroups: [], // Guarda os grupos das jogadas feitas no monte atual
-        burnedCount: 0,        // Cartas eliminadas (queimadas) fora de jogo
-        players,
-        phase: 'SWAP',
-        turnIdx: 0,
-        direction: 1,
-        constraint7: false,
-        freePlayAfterJoker: false,
-        freePlayAfter2: false,
-        bannerText: currentMode === 'sim'
-          ? 'Simulação: os bots estão se preparando...'
-          : 'Preparação: toque numa carta da mão e depois numa aberta da mesa para trocar',
-        tieContext: null,
-        loserName: null,
-        mode: currentMode,
-        escapeOrder: [],
-        sessionLosses: {}
-      };
+      G = dealt.state;
 
       G.players.forEach((p, idx) => {
         if (p.type === 'bot') AIEngine.performInitialSwap(G, idx);
@@ -2144,76 +2124,14 @@
       }
     }
 
+    // Todos prontos: o motor decide quem começa (ou abre o duelo de velocidade)
     function evaluateStartAndDirection() {
-      const lowestPerPlayer = G.players.map((p, idx) => {
-        const minVal = Math.min(...p.hand.map(c => c.val));
-        return { idx, minVal };
-      });
-
-      const globalMin = Math.min(...lowestPerPlayer.map(x => x.minVal));
-      const tiedFirst = lowestPerPlayer.filter(x => x.minVal === globalMin).map(x => x.idx);
-
-      if (tiedFirst.length > 1) {
-        triggerSpeedTie('FIRST', tiedFirst, globalMin, null);
-      } else {
-        resolveSecondLowestDirection(tiedFirst[0]);
-      }
+      if (!G) return;
+      runCoreEvents(Core.startIfReady(G));
     }
 
-    function resolveSecondLowestDirection(firstIdx) {
-      const others = G.players
-        .map((p, idx) => ({ idx, minVal: Math.min(...p.hand.map(c => c.val)) }))
-        .filter(x => x.idx !== firstIdx);
-
-      const secondMin = Math.min(...others.map(x => x.minVal));
-      const tiedSecond = others.filter(x => x.minVal === secondMin).map(x => x.idx);
-
-      if (tiedSecond.length > 1) {
-        triggerSpeedTie('SECOND', tiedSecond, secondMin, firstIdx);
-      } else {
-        finalizeDirectionAndStart(firstIdx, tiedSecond[0]);
-      }
-    }
-
-    // Reorganiza a mesa: quem começa e o 2º (próximas cartas mais baixas) sentam
-    // lado a lado; os demais mantêm a ordem em que estavam depois do 1º.
-    function finalizeDirectionAndStart(firstIdx, secondIdx) {
-      const n = G.players.length;
-      const first = G.players[firstIdx];
-      const second = G.players[secondIdx];
-      const rest = [];
-      for (let k = 1; k < n; k++) {
-        const p = G.players[(firstIdx + k) % n];
-        if (p !== second) rest.push(p);
-      }
-      G.players = [first, second, ...rest];
-      G.players.forEach((p, i) => { p.seatNumber = i + 1; });
-      G.direction = 1;
-      G.turnIdx = 0;
-      G.phase = 'PLAY';
-      G.tieContext = null;
-      // 1º lance obrigatório com a menor carta (a que deu a saída)
-      const openCard = first.hand.reduce((a, c) => (c.val < a.val ? c : a), first.hand[0]);
-      G.openingVal = openCard ? openCard.val : null;
-      G.openingLabel = openCard ? (openCard.isJoker ? 'Coringa' : openCard.label) : null;
-      G.bannerText = `${first.name} abre com ${G.openingLabel}; ${second.name} joga em seguida!`;
-      nlog('seating', { order: G.players.map(p => shortId(p.id)) });
-      SoundEngine.power2();
-      broadcastState();
-      renderGame();
-      scheduleBotIfNeeded();
-    }
-
-    function triggerSpeedTie(role, candidates, cardVal, fixedFirstIdx) {
-      G.phase = 'SPEED_TIE';
-      const rankObj = AppConfig.RANKS.find(r => r.val === cardVal);
-      const label = rankObj ? rankObj.label : 'Coringa';
-      G.tieContext = { role, candidates, cardVal, label, fixedFirstIdx };
-      speedLock = false;
-      SoundEngine.power7();
-      broadcastState();
-      renderGame();
-
+    // Duelo de velocidade: cada bot empatado "toca" depois de um tempo sorteado
+    function startBotSpeedTaps(candidates) {
       candidates.forEach(cIdx => {
         const p = G.players[cIdx];
         if (p.type === 'bot') {
@@ -2231,12 +2149,10 @@
       if (!G || G.phase !== 'SPEED_TIE' || speedLock) return;
       if (!G.tieContext.candidates.includes(winnerIdx)) return;
       speedLock = true;
+      // O duelo depende de quem tocou primeiro: o replay usa o vencedor gravado
+      recordReplayAction(G.players[winnerIdx].id, { type: 'SPEED_WIN', idx: winnerIdx });
 
-      if (G.tieContext.role === 'FIRST') {
-        resolveSecondLowestDirection(winnerIdx);
-      } else {
-        finalizeDirectionAndStart(G.tieContext.fixedFirstIdx, winnerIdx);
-      }
+      runCoreEvents(Core.speedWin(G, winnerIdx).events);
     }
 
     function attemptLocalPlay(handIds, openIds, fromRect = null) {
@@ -2298,373 +2214,112 @@
       }
     }
 
+    // Porta de entrada de todas as ações (você, convidados e bots): grava para o replay
+    // e aplica. Só grava o que poderia valer naquele momento (fase e vez certas).
     function executePlayerAction(playerId, action) {
+      if (!G || !action) return;
       const pIdx = G.players.findIndex(p => p.id === playerId);
       if (pIdx === -1) return;
-      const player = G.players[pIdx];
+      const t = action.type;
+      const plausible = (G.phase === 'SWAP' && (t === 'SWAP_CARDS' || t === 'READY_SWAP')) ||
+        (G.phase === 'PLAY' && pIdx === G.turnIdx && (t === 'PLAY_CARDS' || t === 'PICKUP_PILE' || t === 'PLAY_BLIND'));
+      if (plausible) recordReplayAction(playerId, action);
+      applyPlayerAction(playerId, action);
+      if (plausible) recordReplayCheck();
+    }
 
-      if (action.type === 'SWAP_CARDS' && G.phase === 'SWAP') {
-        const hIdx = player.hand.findIndex(c => c.id === action.handId);
-        const oIdx = player.open.findIndex(c => c.id === action.openId);
-        if (hIdx !== -1 && oIdx !== -1) {
-          const temp = player.hand[hIdx];
-          player.hand[hIdx] = player.open[oIdx];
-          player.open[oIdx] = temp;
-          SoundEngine.slide();
-        }
-        broadcastState({ kind: 'SWAP', sfxTag: 'SLIDE' });
-        renderGame();
+    function applyPlayerAction(playerId, action) {
+      const pIdx = G.players.findIndex(p => p.id === playerId);
+      if (pIdx === -1) return;
+      // Duelo de velocidade: quem tocou primeiro é decidido aqui (relógio do host)
+      if (action.type === 'SPEED_TAP') {
+        if (G.phase === 'SPEED_TIE') handleSpeedTieWin(pIdx);
         return;
       }
+      runCoreEvents(Core.apply(G, playerId, action).events, action.fromRect || null);
+    }
 
-      if (action.type === 'READY_SWAP' && G.phase === 'SWAP') {
-        player.readySwap = true;
-        LoggerModule.logSwap(player, player.open, player.hand);
-        SoundEngine.select();
-        if (G.players.every(p => p.readySwap)) {
-          evaluateStartAndDirection();
-        } else {
-          broadcastState();
-          renderGame();
-        }
-        return;
-      }
-
-      if (action.type === 'SPEED_TAP' && G.phase === 'SPEED_TIE') {
-        handleSpeedTieWin(pIdx);
-        return;
-      }
-
-      if (G.phase !== 'PLAY' || pIdx !== G.turnIdx) return;
-
-      if (action.type === 'PICKUP_PILE') {
-        const check = RulesEngine.canPlayerPickupPile(G, player);
-        if (!check.allowed) return;
-
-        const count = G.discard.length;
-        const topBefore = count > 0 ? G.discard[count - 1].label + G.discard[count - 1].suit : 'Vazio';
-
-        LoggerModule.logTurn({
-          player: player.name,
-          persona: player.persona || 'human',
-          action: check.forcedByNoMove ? 'PICKUP_NO_MOVE_WITH_JOKER' : 'PICKUP_PILE',
-          handBefore: player.hand.map(c => c.label + c.suit),
-          openBefore: player.open.map(c => c.label + c.suit),
-          discardTopBefore: topBefore,
-          discardCountBefore: count
-        });
-
-        G.discard.forEach(c => { c.public = true; }); // todos viram o que foi recolhido
-        G.pickupStamp = Date.now() + Math.random();       // libera o GOMBRA! por 10 s
-        G.lastPickupBy = player.id;
-        G.lastPickupCount = count;                         // monte grande → "organismo vivo"
-        player.hand.push(...G.discard);
-        G.discard = [];
-        G.discardPlayGroups = [];
-        G.constraint7 = false;
-        G.freePlayAfterJoker = false;
-        G.freePlayAfter2 = false;
-        G.bannerText = `${player.name} recolheu o monte (${count} cartas)!`;
-
-        const fx = { kind: 'PICKUP', actorId: player.id, count, sfxTag: 'PICKUP' };
-        triggerFlightVisual({ ...fx, isMe: player.id === myPlayerId });
-        maybeBotReact(player, 'PICKUP', count);
-        advanceTurn(false, fx);
-        return;
-      }
-
-      if (action.type === 'PLAY_BLIND') {
-        if (player.hand.length > 0 || player.open.length > 0) return;
-        const cIdx = player.closed.findIndex(c => c.id === action.cardId);
-        if (cIdx === -1) return;
-        const chosen = player.closed.splice(cIdx, 1)[0];
-
-        if (RulesEngine.isCardPlayable(G, chosen)) {
-          processPlayedCards(player, [chosen], action.fromRect, 'BLIND_SUCCESS');
-        } else {
-          const topBefore = G.discard.length > 0
-            ? G.discard[G.discard.length - 1].label + G.discard[G.discard.length - 1].suit
-            : 'Vazio';
-          G.discard.push(chosen);
-          const count = G.discard.length;
-
-          LoggerModule.logTurn({
-            player: player.name,
-            persona: player.persona || 'human',
-            action: 'BLIND_FAIL_PICKUP',
-            cardFlipped: chosen.label + chosen.suit,
-            discardTopBefore: topBefore,
-            discardCountCollected: count
-          });
-
-          G.discard.forEach(c => { c.public = true; });
-          G.pickupStamp = Date.now() + Math.random();
-          G.lastPickupBy = player.id;
-          G.lastPickupCount = count;
-          player.hand.push(...G.discard);
-          G.discard = [];
-          G.discardPlayGroups = [];
-          G.constraint7 = false;
-          G.freePlayAfterJoker = false;
-          G.freePlayAfter2 = false;
-          G.bannerText = `${player.name} revelou ${chosen.label}${chosen.suit} inválido e recolheu tudo!`;
-          if (player.id === myPlayerId) {
-            showInvalidWarning(`Carta fechada (${chosen.label}${chosen.suit}) menor que o monte! Você recolheu tudo.`);
+    /* Tudo o que acontece em volta de uma jogada (tela, som, animação, log, rede, bots)
+       sai dos eventos que o motor devolve, na ordem em que aconteceram.
+       fromRect: de onde a carta saiu na tela (só para a animação de quem jogou aqui). */
+    function runCoreEvents(events, fromRect = null) {
+      const byId = (id) => G.players.find(p => p.id === id);
+      const fly = (fx, withRect) => triggerFlightVisual({ ...fx, isMe: fx.actorId === myPlayerId, ...(withRect ? { fromRect } : {}) });
+      for (const ev of events) {
+        switch (ev.type) {
+          case 'turnLog':
+            LoggerModule.logTurn(ev.entry);
+            break;
+          case 'swapped':
+            if (ev.ok) SoundEngine.slide();
+            broadcastState({ kind: 'SWAP', sfxTag: 'SLIDE' });
+            renderGame();
+            break;
+          case 'ready': {
+            const p = byId(ev.playerId);
+            LoggerModule.logSwap(p, p.open, p.hand);
+            SoundEngine.select();
+            break;
           }
-          const fx = { kind: 'PICKUP', actorId: player.id, count, sfxTag: 'PICKUP' };
-          triggerFlightVisual({ ...fx, isMe: player.id === myPlayerId });
-          maybeBotReact(player, 'PICKUP', count);
-          advanceTurn(false, fx);
-        }
-        return;
-      }
-
-      if (action.type === 'PLAY_CARDS') {
-        const handChosen = player.hand.filter(c => action.handIds.includes(c.id));
-        const openChosen = player.open.filter(c => action.openIds.includes(c.id));
-        const allChosen = [...handChosen, ...openChosen];
-
-        if (allChosen.length === 0) return;
-        const firstVal = allChosen[0].val;
-        if (!allChosen.every(c => c.val === firstVal)) return;
-        if (!RulesEngine.isCardPlayable(G, allChosen[0])) return;
-
-        if (handChosen.length > 0 && openChosen.length > 0) {
-          if (G.deck.length > 0 || handChosen.length !== player.hand.length) return;
-        }
-        if (handChosen.length === 0 && player.hand.length > 0) return;
-        if (openChosen.length > 0 && G.deck.length > 0) return; // mesa só depois do baralho acabar
-
-        const handSnapshot = player.hand.map(c => c.label + c.suit);
-        const openSnapshot = player.open.map(c => c.label + c.suit);
-
-        player.hand = player.hand.filter(c => !action.handIds.includes(c.id));
-        player.open = player.open.filter(c => !action.openIds.includes(c.id));
-
-        processPlayedCards(player, allChosen, action.fromRect, 'PLAY_CARDS', handSnapshot, openSnapshot);
-      }
-    }
-
-    function processPlayedCards(player, cardsPlayed, fromRect = null, sourceAction = 'PLAY', handBefore = [], openBefore = []) {
-      const r = G.rules;
-      G.openingVal = null; // o lance de abertura já foi feito
-      G.openingLabel = null;
-      const sample = cardsPlayed[0];
-      const countPlayed = cardsPlayed.length;
-      const topBefore = G.discard.length > 0
-        ? G.discard[G.discard.length - 1].label + G.discard[G.discard.length - 1].suit
-        : 'Vazio';
-
-      LoggerModule.logTurn({
-        player: player.name,
-        persona: player.persona || 'human',
-        action: sourceAction,
-        cardsPlayed: cardsPlayed.map(c => c.label + c.suit),
-        handBefore,
-        openBefore,
-        discardTopBefore: topBefore,
-        discardCountBefore: G.discard.length,
-        constraint7Before: G.constraint7,
-        freeAfter2Before: G.freePlayAfter2,
-        deckCount: G.deck.length,
-        turnsWithoutProgress: G.stall ? G.stall.sinceProgress : 0,
-        at: new Date().toISOString()
-      });
-
-      G.discard.push(...cardsPlayed);
-      G.discardPlayGroups.push({
-        playerName: player.name,
-        cards: cardsPlayed.map(c => ({ ...c }))
-      });
-
-      G.constraint7 = false;
-      G.freePlayAfterJoker = false;
-      G.freePlayAfter2 = false;
-
-      let playAgain = false;
-      let burned = false;
-      let reversed = false;
-      let sfxTag = 'PLAY';
-
-      const targetSame = r.decks === 1 ? 4 : 8;
-      if (r.p48 && !sample.isJoker) {
-        if (r.mode48 === 'together') {
-          if (countPlayed >= targetSame) reversed = true;
-        } else {
-          let seqCount = 0;
-          for (let i = G.discard.length - 1; i >= 0; i--) {
-            if (G.discard[i].val === sample.val && !G.discard[i].isJoker) seqCount++;
-            else break;
+          case 'changed':
+            broadcastState();
+            renderGame();
+            break;
+          case 'seated':
+            nlog('seating', { order: ev.order.map(shortId) });
+            SoundEngine.power2();
+            broadcastState();
+            renderGame();
+            scheduleBotIfNeeded();
+            break;
+          case 'speedTie':
+            speedLock = false;
+            SoundEngine.power7();
+            broadcastState();
+            renderGame();
+            startBotSpeedTaps(ev.candidates);
+            break;
+          case 'pickup':
+            G.pickupStamp = Date.now() + Math.random(); // libera o GOMBRA! por 10 s
+            break;
+          case 'blindFail':
+            if (ev.playerId === myPlayerId) {
+              showInvalidWarning(`Carta fechada (${ev.card.label}${ev.card.suit}) menor que o monte! Você recolheu tudo.`);
+            }
+            break;
+          case 'flight':
+            fly(ev.fx, ev.useFromRect);
+            break;
+          case 'botReact':
+            maybeBotReact(byId(ev.playerId), ev.kind, ev.count);
+            break;
+          case 'gameOver': {
+            const loser = byId(ev.loserId);
+            G.loserAvatar = loser.avatar || AvatarModule.getDefaultAvatar(loser.type, loser.persona);
+            turboMode = false;
+            recordMatchResult(); // simulação e tutorial não contam
+            LoggerModule.logMatchEnd(loser.name, {
+              actions: matchActionCount + 0, turnCounter: G.turnCounter || 0, loserId: loser.id,
+              escapeOrder: (G.escapeOrder || []).slice(), burned: G.burnedCount || 0, digest: stateDigest(G)
+            });
+            fly(ev.fx, true);
+            broadcastState(ev.fx);
+            renderGame();
+            break;
           }
-          if (seqCount >= targetSame) reversed = true;
+          case 'turnAdvanced':
+            selectedHandIds.clear();
+            selectedOpenIds.clear();
+            if (turboShouldPaint()) {
+              broadcastState(ev.fx);
+              renderGame();
+            }
+            scheduleBotIfNeeded();
+            break;
+          default:
+            break;
         }
       }
-
-      if (reversed) {
-        G.direction *= -1;
-        sfxTag = 'REVERSE';
-        if (r.burn48) burned = true;
-      }
-
-      if (sample.val === 10 && r.p10) {
-        burned = true;
-        sfxTag = 'BURN10';
-        if (r.after10 === 'again') playAgain = true;
-      }
-
-      if (sample.val === 7 && r.p7 && !burned) {
-        G.constraint7 = true;
-        sfxTag = 'POWER7';
-      }
-
-      if (sample.val === 15 && r.p2) {
-        playAgain = true;
-        G.freePlayAfter2 = true;
-        sfxTag = 'POWER2';
-        if (player.hand.length === 0 && G.deck.length > 0) {
-          const drawCount = Math.min(r.draw2, G.deck.length);
-          player.hand.push(...G.deck.splice(0, drawCount));
-          triggerFlightVisual({ kind: 'DRAW', actorId: player.id, isMe: player.id === myPlayerId, count: drawCount });
-        }
-      }
-
-      if (sample.isJoker && r.pjoker) {
-        G.freePlayAfterJoker = true;
-        sfxTag = 'JOKER';
-        const steps = r.multijoker === 'per_joker' ? countPlayed : 1;
-        rotateHandsInPlayDirection(steps);
-      }
-
-      if (burned) {
-        G.burnedCount = (G.burnedCount || 0) + G.discard.length;
-        G.discard = [];
-        G.discardPlayGroups = [];
-        G.constraint7 = false;
-        G.freePlayAfterJoker = false;
-        G.freePlayAfter2 = false;
-        sfxTag = 'BURN10';
-      }
-
-      if (!playAgain && G.deck.length > 0 && player.hand.length < 3) {
-        const needed = Math.min(3 - player.hand.length, G.deck.length);
-        player.hand.push(...G.deck.splice(0, needed));
-        triggerFlightVisual({ kind: 'DRAW', actorId: player.id, isMe: player.id === myPlayerId, count: needed });
-      }
-
-      G.players.forEach(p => {
-        if (!p.escaped && p.hand.length === 0 && p.open.length === 0 && p.closed.length === 0 && G.deck.length === 0) {
-          p.escaped = true;
-          (G.escapeOrder || (G.escapeOrder = [])).push(p.id); // ordem de saída (1º, 2º, ...)
-        }
-      });
-
-      const desc = `${player.name} jogou ${countPlayed}x ${sample.label}${sample.isJoker ? '' : sample.suit}`;
-      if (sample.val === 15 && r.p2 && !player.escaped) {
-        G.bannerText = `${desc} — ${player.name} continua jogando (qualquer carta)!`;
-      } else if (burned) {
-        G.bannerText = `${desc} (Monte Queimado!)`;
-      } else if (reversed) {
-        G.bannerText = `${desc} (Ordem Invertida!)`;
-      } else {
-        G.bannerText = desc;
-      }
-
-      const activeRemaining = G.players.filter(p => !p.escaped);
-      if (activeRemaining.length <= 1) {
-        const loser = activeRemaining[0] || player;
-        G.phase = 'GAMEOVER';
-        G.loserName = loser.name;
-        G.loserAvatar = loser.avatar || AvatarModule.getDefaultAvatar(loser.type, loser.persona);
-        G.loserId = loser.id;
-        turboMode = false;
-        recordMatchResult(); // simulação e tutorial não contam
-        LoggerModule.logMatchEnd(loser.name);
-        const overFx = { kind: 'PLAY', actorId: player.id, cards: cardsPlayed, sfxTag: 'GAMEOVER' };
-        triggerFlightVisual({ ...overFx, isMe: player.id === myPlayerId, fromRect });
-        broadcastState(overFx);
-        renderGame();
-        return;
-      }
-
-      const fx = { kind: 'PLAY', actorId: player.id, cards: cardsPlayed, sfxTag, burned };
-      triggerFlightVisual({ ...fx, isMe: player.id === myPlayerId, fromRect });
-      maybeBotReact(player, burned ? 'BURN' : (reversed ? 'REVERSE' : (sample.isJoker ? 'JOKER' : null)));
-
-      if (player.escaped) playAgain = false;
-      advanceTurn(playAgain, fx);
-    }
-
-    function rotateHandsInPlayDirection(steps) {
-      const activePlayers = G.players.filter(p => !p.escaped);
-      if (activePlayers.length < 2) return;
-      const totalSteps = steps % activePlayers.length;
-      if (totalSteps === 0) return;
-
-      for (let s = 0; s < totalSteps; s++) {
-        const snapshot = activePlayers.map(p => [...p.hand]);
-        const n = activePlayers.length;
-        for (let i = 0; i < n; i++) {
-          const targetIdx = (i + G.direction + n) % n;
-          activePlayers[targetIdx].hand = snapshot[i];
-        }
-      }
-    }
-
-    /* Regra: enquanto houver baralho de compra, a mesa (abertas/fechadas) não pode
-       ser jogada. Se a vez começar com a mão abaixo de 3 cartas — o Coringa girou
-       uma mão vazia/pequena, ou uma jogada extra (2, 10 "joga de novo") zerou a mão —
-       o jogador compra antes de jogar:
-       - vez normal: completa até 3 cartas;
-       - jogada extra com a mão vazia: compra a quantidade da regra "se zerar a mão" (1 ou 3). */
-    function refillHandAtTurnStart(samePlayerAgain) {
-      if (!G || G.phase !== 'PLAY' || G.deck.length === 0) return;
-      const p = G.players[G.turnIdx];
-      if (!p || p.escaped) return;
-      const target = samePlayerAgain
-        ? (p.hand.length === 0 ? Math.min(3, G.rules.draw2 || 1) : 0)
-        : 3;
-      const need = Math.min(target - p.hand.length, G.deck.length);
-      if (need <= 0) return;
-      p.hand.push(...G.deck.splice(0, need));
-      LoggerModule.logTurn({ player: p.name, persona: p.persona || 'human', action: 'DRAW_AT_TURN_START', count: need, deckCount: G.deck.length, samePlayerAgain });
-      triggerFlightVisual({ kind: 'DRAW', actorId: p.id, isMe: p.id === myPlayerId, count: need });
-    }
-
-    function advanceTurn(samePlayerAgain, fx = null) {
-      selectedHandIds.clear();
-      selectedOpenIds.clear();
-
-      if (!samePlayerAgain) {
-        G.turnIdx = RulesEngine.getNextActivePlayerIndex(G, G.turnIdx);
-      }
-      refillHandAtTurnStart(samePlayerAgain);
-      updateStallTracker();
-
-      if (turboShouldPaint()) {
-        broadcastState(fx);
-        renderGame();
-      }
-      scheduleBotIfNeeded();
-    }
-
-    // Detector de estagnação: conta turnos sem que ninguém atinja seu menor nº de cartas
-    // e sem o baralho de compra diminuir. A IA usa isso para mudar de estratégia.
-    function updateStallTracker() {
-      if (!G.stall) G.stall = { best: {}, lastDeck: G.deck.length, sinceProgress: 0, maxStreak: 0 };
-      let progressed = G.deck.length < G.stall.lastDeck;
-      G.stall.lastDeck = G.deck.length;
-      G.players.forEach(p => {
-        if (p.escaped) return;
-        const total = p.hand.length + p.open.length + p.closed.length;
-        const best = G.stall.best[p.id];
-        if (best === undefined || total < best) {
-          G.stall.best[p.id] = total;
-          progressed = true;
-        }
-      });
-      G.stall.sinceProgress = progressed ? 0 : G.stall.sinceProgress + 1;
-      G.turnCounter = (G.turnCounter || 0) + 1;
-      G.stall.maxStreak = Math.max(G.stall.maxStreak, G.stall.sinceProgress);
     }
 
     const BOT_DELAY_MS = 950;

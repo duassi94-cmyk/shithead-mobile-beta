@@ -9,6 +9,43 @@ pelo `index.html`: são abertas só durante os testes.
 | `sim-harness.js` | Roda partidas só entre bots, sem tela e sem som, e confere se nenhuma carta some ou duplica. Use numa aba do jogo (não na que você usa para jogar). |
 | `layout-test.js` | Confere em vários tamanhos de tela se algo fica cortado, sobreposto ou fora da tela. Desliga a gravação no armazenamento do navegador da aba. |
 | `security-check.js` | Age como um aparelho estranho contra uma sala aberta: versão antiga, mensagem sem entrar, id inválido e excesso de mensagens. |
+| `replay.js` | Reproduz uma partida a partir do log (semente + ações) e confere a distribuição, as impressões digitais da mesa, cada jogada e o final. |
+| `core-diff.js` | Joga partidas pelo fluxo do jogo e repete cada ação direto no motor de regras (`core.js`), comparando a mesa inteira e tudo o que acontece em volta (log, sons, animações, reações, fim). Também grava partidas de referência para conferir trocas futuras do motor. |
+
+## Motor de regras
+
+As regras moram só em `core.js` (sem tela, som, rede ou relógio). Cada ação muda a mesa e
+devolve uma lista de eventos; o `game.js` transforma os eventos em tela, som, log e rede.
+
+```js
+// numa aba de http://localhost:8765/ (não a que você usa para jogar)
+const s = document.createElement('script'); s.src = 'tests/core-diff.js'; document.head.appendChild(s);
+await CoreDiff.run({ matches: 20 });     // { partidas, acoes, falhas: 0, ... }
+CoreDiff.start({ matches: 200 }); CoreDiff.progress   // rodada longa em segundo plano
+
+// Antes de mexer no motor: grave partidas de referência (banco só de teste no navegador)
+await CoreDiff.golden({ matches: 40 });
+// Depois da mudança, numa aba nova, reproduza todas com o motor novo:
+const r = document.createElement('script'); r.src = 'tests/replay.js'; document.head.appendChild(r);
+(await Replay.all({ matches: await CoreDiff.loadGolden() })).filter(x => !x.ok)   // [] = nada mudou
+await CoreDiff.dropGolden();             // apaga o banco de teste
+```
+
+## Replay
+
+O log de cada partida (a partir da build 2026-11-10.3) guarda, só no aparelho do host,
+a semente do embaralhamento e a lista de ações aplicadas (de todos: você, convidados e bots).
+
+```js
+// numa aba de http://localhost:8765/ (o replay troca o estado da aba; recarregue depois)
+const s = document.createElement('script'); s.src = 'tests/replay.js'; document.head.appendChild(s);
+await Replay.fromSaved();            // última partida deste navegador
+await Replay.run(logExportado);      // JSON do botão "Baixar Log" (última partida)
+await Replay.all(logExportado);      // todas as partidas do log
+```
+
+`ok: true` = a partida reproduzida bateu em tudo. Partidas interrompidas no meio
+aparecem com "o log não tem o final", mas as conferências até ali continuam valendo.
 
 ## Simulação
 
