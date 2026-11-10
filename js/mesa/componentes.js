@@ -31,7 +31,7 @@ function SeqBar({ nodes }) {
    seats: [{ id, left, top, turn, next, escaped, avatar, score, handCount,
              name, fullName, status, slots: [{ kind: 'open'|'closed'|'empty', red, label }] }] */
 function MiniSlot({ s }) {
-  if (s.kind === 'open') return html`<div class=${'mini-slot open-card' + (s.red ? ' red' : '')}>${s.label}</div>`;
+  if (s.kind === 'open') return html`<div class=${'mini-slot open-card' + (s.red ? ' red' : '') + (SUIT_CODE[s.suit] ? ' suit-' + SUIT_CODE[s.suit] : '')}>${s.label}</div>`;
   return html`<div class=${s.kind === 'closed' ? 'mini-slot' : 'mini-slot empty'}></div>`;
 }
 function Seat({ s }) {
@@ -58,6 +58,8 @@ function Seats({ seats }) {
 
 /* ---- Nome falado de uma carta (leitores de tela) ---------------------------- */
 const RANK_NAME = { A: 'Ás', J: 'Valete', Q: 'Dama', K: 'Rei' };
+// classe por naipe (4 cores nos naipes: style.css, html[data-suits="4"])
+const SUIT_CODE = { '♠': 's', '♥': 'h', '♦': 'd', '♣': 'c' };
 const SUIT_NAME = { '♠': 'espadas', '♥': 'copas', '♦': 'ouros', '♣': 'paus' };
 function cardSpoken(card) {
   if (!card || card.hidden) return 'carta virada';
@@ -75,7 +77,7 @@ function Card({ card, power = '', cls = '', style = null, back = false, id = nul
   const ref = bind ? (el) => { if (el) bind(el); } : null;
   if (back || !card || card.hidden) return html`<div class=${'playing-card card-back' + (cls ? ' ' + cls : '')} style=${style} data-card-id=${id} ref=${ref} ...${ax}></div>`;
   const face = !card.isJoker && card.val >= 11 && card.val <= 13;
-  const c = 'playing-card' + (card.isRed ? ' red' : '') + (card.isJoker ? ' joker-card' : '') + (face ? ' face-card' : '') + (cls ? ' ' + cls : '');
+  const c = 'playing-card' + (card.isRed ? ' red' : '') + (SUIT_CODE[card.suit] ? ' suit-' + SUIT_CODE[card.suit] : '') + (card.isJoker ? ' joker-card' : '') + (face ? ' face-card' : '') + (cls ? ' ' + cls : '');
   const badge = power ? html`<div class="card-power">${power}</div>` : null;
   if (card.isJoker) {
     return html`<div class=${c} style=${style} data-card-id=${id} ref=${ref} ...${ax}><div class="card-corner"><span class="rank">★</span></div><div class="card-center">🃏</div>${badge}</div>`;
@@ -126,6 +128,7 @@ function mount(el, vnode) {
 
 const Mesa = {
   cardSpoken,
+  suitCode: (suit) => SUIT_CODE[suit] || '',
   seqBar: (el, nodes) => mount(el, html`<${SeqBar} nodes=${nodes} />`),
   seats: (el, seats) => mount(el, html`<${Seats} seats=${seats} />`),
   pile: (el, items, tags) => mount(el, html`<${Pile} items=${items} tags=${tags} />`),

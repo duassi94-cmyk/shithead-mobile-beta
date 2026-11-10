@@ -30,11 +30,15 @@ import { HISTORY_MAX, historyBefore, addHistory, historyText } from './nucleo/hi
 import { AIEngine } from './bots/ia.js';
 import * as Sanitizar from './rede/sanitizar.js';
 import { Mesa } from './mesa/componentes.js';
+import { Aparencia } from './servicos/aparencia.js';
+
+// Aparência escolhida neste aparelho (cores dos naipes, verso, feltro): antes de desenhar
+Aparencia.apply();
 
 Object.assign(window, {
   AppConfig, Store, LogDB, AvatarModule, NetLog, LoggerModule, SoundEngine,
   Rng, stateDigest, RulesEngine, Core, AIEngine,
-  Mesa,
+  Mesa, Aparencia,
   PlayHistory: { MAX: HISTORY_MAX, before: historyBefore, add: addHistory, text: historyText }
 }, Sanitizar);
 

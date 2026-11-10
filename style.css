@@ -18,6 +18,10 @@
       --fs-sm: 12px;
       --fs-md: 13px;
       --tap: 44px;
+      /* Aparência (Ajustes): feltro e verso padrão; js/servicos/aparencia.js troca pelos atributos da raiz */
+      --felt-1: #15803d; --felt-2: #166534; --felt-3: #0f3d24;
+      --back-1: #b91c1c; --back-2: #991b1b; --back-3: #7f1d1d;
+      --suit-d: #2563eb; --suit-c: #15803d;
     }
 
     @media (min-width: 768px) {
@@ -808,7 +812,7 @@
       border-radius: 50% / 46%;
       background:
         radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 55%),
-        radial-gradient(ellipse at 50% 50%, #15803d 0%, #166534 45%, #0f3d24 100%);
+        radial-gradient(ellipse at 50% 50%, var(--felt-1) 0%, var(--felt-2) 45%, var(--felt-3) 100%);
       border: 9px solid #5b3417;
       box-shadow:
         0 0 0 2px #2a1709,
@@ -1027,7 +1031,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: repeating-linear-gradient(45deg, #991b1b, #991b1b 3px, #7f1d1d 3px, #7f1d1d 6px);
+      background: repeating-linear-gradient(45deg, var(--back-2), var(--back-2) 3px, var(--back-3) 3px, var(--back-3) 6px);
       border: 1.5px solid #fff;
       color: transparent;
       box-shadow: 0 2px 4px rgba(0,0,0,0.5);
@@ -1108,7 +1112,7 @@
     .playing-card.card-back {
       background:
         radial-gradient(circle at 50% 50%, rgba(255,255,255,0.18) 0 18%, transparent 19%),
-        repeating-linear-gradient(45deg, #b91c1c 0 4px, #991b1b 4px 8px);
+        repeating-linear-gradient(45deg, var(--back-1) 0 4px, var(--back-2) 4px 8px);
       border: 3px solid #fff;
       outline: 1px solid rgba(0,0,0,0.25);
       color: transparent;
@@ -1507,7 +1511,7 @@
     }
     .dock-card.joker { background: linear-gradient(135deg, #fef3c7, #fbbf24); color: #7c2d12; }
     .dock-card.back {
-      background: repeating-linear-gradient(45deg, #b91c1c 0 3px, #991b1b 3px 6px);
+      background: repeating-linear-gradient(45deg, var(--back-1) 0 3px, var(--back-2) 3px 6px);
       border: 2px solid #fff;
     }
     .dock-label { font-size: 0.62rem; font-weight: 800; text-align: center; line-height: 1.1; white-space: nowrap; flex-shrink: 0; width: 3.6em; color: var(--text-dim); }
@@ -1935,3 +1939,50 @@
     .slot-right { display: flex; gap: 6px; align-items: center; }
     .btn.slot-x { padding: 3px 7px; font-size: 0.72rem; flex-shrink: 0; }
     .badge.slot-ia { flex-shrink: 0; }
+
+    /* ===== Aparência escolhida em Ajustes (só neste aparelho) ===== */
+    html[data-felt="blue"] { --felt-1: #1e64b4; --felt-2: #194f8f; --felt-3: #0c2748; }
+    html[data-felt="wine"] { --felt-1: #9b2343; --felt-2: #7a1a35; --felt-3: #3d0b1a; }
+    html[data-back="blue"] { --back-1: #1d4ed8; --back-2: #1e40af; --back-3: #1e3a8a; }
+    html[data-back="green"] { --back-1: #15803d; --back-2: #166534; --back-3: #14532d; }
+    html[data-back="black"] { --back-1: #3f3f46; --back-2: #27272a; --back-3: #18181b; }
+    /* 4 cores: ♠ preto, ♥ vermelho, ♦ azul, ♣ verde (cada naipe com cor própria) */
+    html[data-suits="4"] .playing-card.suit-d, html[data-suits="4"] .mini-slot.suit-d { color: var(--suit-d); }
+    html[data-suits="4"] .playing-card.suit-c, html[data-suits="4"] .mini-slot.suit-c { color: var(--suit-c); }
+
+    /* Ajustes → Aparência: opções com amostra e prévia */
+    .look-row { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .look-row > span { font-size: var(--fs-md); font-weight: 700; color: var(--text-dim); }
+    .look-options { display: flex; gap: 8px; flex-wrap: wrap; }
+    .look-opt {
+      min-width: var(--tap); min-height: var(--tap);
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      border: 2px solid rgba(255,255,255,0.14);
+      background: var(--surface-light);
+      color: var(--text);
+      font-size: var(--fs-md); font-weight: 700;
+      cursor: pointer;
+    }
+    .look-opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35); }
+    .look-opt:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+    .swatch { width: 22px; height: 30px; border-radius: 4px; border: 2px solid #fff; flex-shrink: 0; }
+    .swatch-back-red { background: repeating-linear-gradient(45deg, #b91c1c 0 3px, #991b1b 3px 6px); }
+    .swatch-back-blue { background: repeating-linear-gradient(45deg, #1d4ed8 0 3px, #1e40af 3px 6px); }
+    .swatch-back-green { background: repeating-linear-gradient(45deg, #15803d 0 3px, #166534 3px 6px); }
+    .swatch-back-black { background: repeating-linear-gradient(45deg, #3f3f46 0 3px, #27272a 3px 6px); }
+    .swatch.felt-sw { width: 30px; height: 22px; border-radius: 50%; border: 3px solid #5b3417; }
+    .swatch-felt-green { background: radial-gradient(ellipse, #15803d, #0f3d24); }
+    .swatch-felt-blue { background: radial-gradient(ellipse, #1e64b4, #0c2748); }
+    .swatch-felt-wine { background: radial-gradient(ellipse, #9b2343, #3d0b1a); }
+    .look-preview {
+      --card-w: 44px; --card-h: 63px;
+      display: flex; gap: 6px; justify-content: center; align-items: center;
+      margin-top: 12px; padding: 14px 10px;
+      border-radius: 50% / 40%;
+      border: 6px solid #5b3417;
+      background: radial-gradient(ellipse at 50% 50%, var(--felt-1) 0%, var(--felt-2) 45%, var(--felt-3) 100%);
+    }
+    .look-preview .playing-card { cursor: default; }
+

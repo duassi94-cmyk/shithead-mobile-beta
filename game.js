@@ -104,7 +104,7 @@
         return el;
       }
       const isFace = !card.isJoker && card.val >= 11 && card.val <= 13;
-      el.className = 'playing-card' + (card.isRed ? ' red' : '') + (card.isJoker ? ' joker-card' : '') + (isFace ? ' face-card' : '');
+      el.className = 'playing-card' + (card.isRed ? ' red' : '') + (Mesa.suitCode(card.suit) ? ' suit-' + Mesa.suitCode(card.suit) : '') + (card.isJoker ? ' joker-card' : '') + (isFace ? ' face-card' : '');
       const icon = powerIcon(card);
       const badge = icon ? `<div class="card-power">${icon}</div>` : '';
       if (card.isJoker) {
@@ -2840,7 +2840,7 @@
           status: p.escaped ? '✔ Salvo!' : (turn ? 'jogando…' : (next ? 'próximo' : '')),
           slots: [0, 1, 2].map(i => {
             const o = p.open[i];
-            if (o) return { kind: 'open', red: !!o.isRed, label: o.isJoker ? '★' : o.label, spoken: Mesa.cardSpoken(o) };
+            if (o) return { kind: 'open', red: !!o.isRed, suit: o.isJoker ? '' : o.suit, label: o.isJoker ? '★' : o.label, spoken: Mesa.cardSpoken(o) };
             return { kind: p.closed[i] ? 'closed' : 'empty' };
           })
         });
@@ -3870,7 +3870,29 @@
         renderInstallBox();
       }, () => {});
     });
+    /* ---- Ajustes → Aparência (naipes, verso, mesa) ------------------------------------ */
+    function renderLookBox() {
+      const look = Aparencia.get();
+      document.querySelectorAll('#box-look [data-look]').forEach(b => {
+        b.setAttribute('aria-pressed', String(look[b.dataset.look] === b.dataset.value));
+      });
+      // Prévia: uma carta de cada naipe + um verso, sobre o feltro escolhido
+      const sample = [['A', 14, '♠'], ['K', 13, '♥'], ['7', 7, '♦'], ['10', 10, '♣']].map(([label, val, suit], i) => ({
+        key: 'pv' + i, card: { id: 'pv' + i, label, val, suit, isRed: suit === '♥' || suit === '♦', isJoker: false }
+      }));
+      sample.push({ key: 'pvback', card: null });
+      Mesa.pile(document.getElementById('look-preview'), sample, []);
+    }
+    document.getElementById('box-look').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-look]');
+      if (!b) return;
+      Aparencia.set(b.dataset.look, b.dataset.value);
+      SoundEngine.select();
+      renderLookBox();
+    });
+
     function renderSettingsView() {
+      renderLookBox();
       renderInstallBox();
       refreshLogPanelUI();
       document.getElementById('lbl-about').textContent =

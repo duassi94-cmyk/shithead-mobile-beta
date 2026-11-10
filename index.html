@@ -360,6 +360,36 @@
       <!-- ===== AJUSTES ===== -->
       <section id="view-settings" class="lobby-view" data-view="settings" aria-label="Ajustes">
         <div class="scroll-panel">
+          <!-- Aparência: só neste aparelho (js/servicos/aparencia.js) -->
+          <div class="card-box" id="box-look">
+            <h2>Aparência</h2>
+            <div class="look-row" role="group" aria-labelledby="lbl-look-suits">
+              <span id="lbl-look-suits">Cores dos naipes</span>
+              <div class="look-options">
+                <button type="button" class="look-opt" data-look="suits" data-value="2">2 cores</button>
+                <button type="button" class="look-opt" data-look="suits" data-value="4">4 cores</button>
+              </div>
+            </div>
+            <div class="look-row" role="group" aria-labelledby="lbl-look-back">
+              <span id="lbl-look-back">Verso das cartas</span>
+              <div class="look-options">
+                <button type="button" class="look-opt" data-look="back" data-value="red" aria-label="Verso vermelho"><span class="swatch swatch-back-red"></span>Vermelho</button>
+                <button type="button" class="look-opt" data-look="back" data-value="blue" aria-label="Verso azul"><span class="swatch swatch-back-blue"></span>Azul</button>
+                <button type="button" class="look-opt" data-look="back" data-value="green" aria-label="Verso verde"><span class="swatch swatch-back-green"></span>Verde</button>
+                <button type="button" class="look-opt" data-look="back" data-value="black" aria-label="Verso preto"><span class="swatch swatch-back-black"></span>Preto</button>
+              </div>
+            </div>
+            <div class="look-row" role="group" aria-labelledby="lbl-look-felt">
+              <span id="lbl-look-felt">Mesa</span>
+              <div class="look-options">
+                <button type="button" class="look-opt" data-look="felt" data-value="green" aria-label="Mesa verde"><span class="swatch felt-sw swatch-felt-green"></span>Verde</button>
+                <button type="button" class="look-opt" data-look="felt" data-value="blue" aria-label="Mesa azul"><span class="swatch felt-sw swatch-felt-blue"></span>Azul</button>
+                <button type="button" class="look-opt" data-look="felt" data-value="wine" aria-label="Mesa vinho"><span class="swatch felt-sw swatch-felt-wine"></span>Vinho</button>
+              </div>
+            </div>
+            <div id="look-preview" class="look-preview" aria-hidden="true"></div>
+          </div>
+
           <div class="card-box" id="box-install">
             <h2>Instalar no celular</h2>
             <p id="lbl-install-status" class="hint-text hint-left"></p>
