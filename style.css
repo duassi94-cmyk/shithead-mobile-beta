@@ -109,6 +109,42 @@
       box-shadow: 0 0 14px rgba(239, 68, 68, 0.85) !important;
     }
 
+    /* Atributo hidden sempre esconde (mesmo em elementos com display definido por classe) */
+    [hidden] { display: none !important; }
+
+    /* Ícones SVG (sprite no index.html): traço na cor do texto */
+    .ico {
+      width: 1.15em;
+      height: 1.15em;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vertical-align: -0.2em;
+      pointer-events: none;
+    }
+    .btn .ico { margin-right: 2px; }
+    .btn-xs .ico { width: 1.05em; height: 1.05em; margin-right: 0; }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--surface-light);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 1.15rem;
+      transition: transform 0.12s ease, filter 0.15s;
+    }
+    .icon-btn:active { transform: scale(0.94); }
+    .icon-btn[aria-pressed="true"] { color: var(--text-dim); }
+
     /* LOBBY E CONFIGURAÇÕES */
     .scroll-panel {
       flex: 1;
@@ -121,9 +157,182 @@
     .brand-header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 6px 0 4px;
+      gap: 10px;
+      padding: 6px 0 8px;
     }
+    .brand-header .brand-title-wrap { flex: 1; min-width: 0; }
+    .brand-actions { display: flex; gap: 8px; }
+    .brand-header.has-back .brand-title-wrap h1 { font-size: 1.3rem; }
+    .brand-header.has-back .brand-title-wrap p { font-size: 0.82rem; color: var(--text); font-weight: 700; }
+
+    /* ---- Telas de entrada: uma vista ativa por vez ---- */
+    /* Em telas largas (tablet deitado, computador) o conteúdo fica numa coluna central */
+    #screen-lobby { align-items: center; }
+    #screen-lobby > .brand-header, #screen-lobby > .lobby-view { width: 100%; max-width: 560px; }
+    .lobby-view { display: none; flex: 1; min-height: 0; flex-direction: column; }
+    .lobby-view.active { display: flex; }
+
+    .profile-card { gap: 8px; }
+    .avatar-btn {
+      position: relative;
+      border: none;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+      border-radius: 50%;
+    }
+    .avatar-btn .avatar-img { width: 56px; height: 56px; display: block; }
+    .avatar-edit {
+      position: absolute;
+      right: -2px;
+      bottom: -2px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      border: 2px solid var(--bg-dark);
+    }
+    .profile-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .profile-fields input { width: 100%; font-size: 1rem; padding: 10px 12px; }
+    .field-label { font-size: 0.72rem; color: var(--text-dim); font-weight: 700; }
+    .photo-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .photo-actions .btn { flex: 1 1 auto; min-height: 40px; }
+
+    .home-actions { display: flex; flex-direction: column; gap: 10px; }
+    .hero-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      min-height: 68px;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--surface);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.15s;
+    }
+    .hero-btn:active { transform: scale(0.98); }
+    .hero-btn:disabled { opacity: 0.4; pointer-events: none; }
+    .hero-btn span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .hero-btn b { font-size: 1.06rem; font-weight: 800; }
+    .hero-btn small { font-size: 0.78rem; color: var(--text-dim); line-height: 1.25; }
+    .hero-ico { width: 28px; height: 28px; color: var(--accent); }
+    .hero-primary { background: linear-gradient(135deg, #fbbf24, #f97316); border-color: transparent; color: #1c1917; }
+    .hero-primary small { color: rgba(28, 25, 23, 0.78); }
+    .hero-primary .hero-ico { color: #1c1917; }
+    .join-box { display: flex; flex-direction: column; gap: 8px; }
+    .join-box .btn { min-height: 44px; }
+    .join-box input { min-height: 44px; font-size: 1rem; }
+
+    .home-links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+    .link-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-height: 64px;
+      padding: 8px 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(15, 23, 42, 0.55);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+    }
+    .link-btn .ico { width: 22px; height: 22px; color: var(--cyan); }
+    .link-btn:active { transform: scale(0.97); }
+    .link-center { min-height: 44px; background: none; border: none; color: var(--text-dim); font-weight: 600; text-decoration: underline; }
+
+    .room-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      min-height: 56px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(56, 189, 248, 0.6);
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+    .room-banner span { display: flex; flex-direction: column; gap: 2px; }
+    .room-banner small { font-size: 0.76rem; color: #bae6fd; }
+
+    .invite-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      padding: 16px 12px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.14));
+      border: 1px solid rgba(245, 158, 11, 0.55);
+      font-size: 1.02rem;
+      font-weight: 700;
+    }
+    .invite-hero b { color: var(--accent); letter-spacing: 3px; font-size: 1.15rem; }
+    .invite-hero small { font-size: 0.8rem; color: var(--text-dim); font-weight: 500; }
+    .invite-ico { width: 34px; height: 34px; color: var(--accent); }
+    .btn-big {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 52px;
+      font-size: 1.02rem;
+      border-radius: 12px;
+    }
+
+    .room-code-line { font-size: 0.86rem; }
+    .room-code-line strong { color: var(--accent); font-size: 1.5rem; letter-spacing: 3px; }
+    .hint-text { font-size: 0.74rem; color: var(--text-dim); text-align: center; line-height: 1.35; }
+    .hint-left { text-align: left; }
+
+    /* Regras: estilos prontos + texto do que vale na mesa */
+    .preset-badge { background: rgba(245, 158, 11, 0.18); color: #fde68a; }
+    .preset-list { display: flex; flex-direction: column; gap: 6px; }
+    .preset-btn {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      width: 100%;
+      min-height: 52px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1.5px solid rgba(255,255,255,0.1);
+      background: rgba(15, 23, 42, 0.55);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+    .preset-btn b { font-size: 0.92rem; }
+    .preset-btn small { font-size: 0.74rem; color: var(--text-dim); line-height: 1.3; }
+    .preset-btn[aria-checked="true"] { border-color: var(--accent); background: rgba(245, 158, 11, 0.12); }
+    .preset-btn[aria-checked="true"] b::after { content: ' ✓'; color: var(--accent); }
+    .rules-text { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; line-height: 1.35; }
+    .rules-text li { padding-left: 14px; position: relative; }
+    .rules-text li::before { content: '•'; position: absolute; left: 3px; color: var(--accent); }
+    #btn-rules-custom { align-self: flex-start; min-height: 40px; }
+
+    .install-steps { padding-left: 20px; font-size: 0.84rem; line-height: 1.5; display: flex; flex-direction: column; gap: 4px; }
+    #btn-install { min-height: 46px; }
     .brand-title-wrap h1 {
       font-size: 1.75rem;
       font-weight: 900;

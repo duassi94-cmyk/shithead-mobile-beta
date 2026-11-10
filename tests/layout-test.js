@@ -108,5 +108,40 @@
     await wait(ms); clearInterval(auto); clearInterval(samp);
     return Object.fromEntries(Object.entries(chg).map(([k, v]) => [k, v.length + ' | ' + v.slice(0, 2).join(' ; ')]));
   };
+  // Telas de entrada (Início, Convite, Sala, Placar, Ajustes) no tamanho atual da janela:
+  // nada fora da tela na horizontal, sem rolagem lateral, textos inteiros e alvos de toque
+  // principais com pelo menos 44 px de altura.
+  window.__lobby = async () => {
+    if (document.getElementById('screen-game').classList.contains('active')) { document.getElementById('btn-leave').click(); await wait(300); }
+    const vw = innerWidth, out = [];
+    const views = ['home', 'invite', 'room', 'board', 'settings'];
+    for (const v of views) {
+      showView(v, { push: false });
+      if (v === 'room') { document.getElementById('box-rules').style.display = 'flex'; }
+      await wait(60);
+      const view = document.getElementById('view-' + v);
+      const probs = [];
+      if (document.documentElement.scrollWidth > vw) probs.push('página rola na horizontal');
+      view.querySelectorAll('button, input, select, label, h2, small, b, li, p').forEach(e => {
+        if (!e.offsetWidth) return;
+        const r = R(e);
+        if (r.left < -0.5 || r.right > vw + 0.5) probs.push((e.id || e.tagName.toLowerCase()) + ' fora da tela');
+      });
+      view.querySelectorAll('.hero-btn, .link-btn, .preset-btn, .btn-big, .room-banner').forEach(e => {
+        if (e.offsetWidth && e.offsetHeight < 44) probs.push((e.id || e.className.split(' ')[0]) + ' com ' + e.offsetHeight + 'px de altura');
+        if (e.offsetWidth && e.scrollWidth > e.clientWidth + 1) probs.push((e.id || e.className.split(' ')[0]) + ' texto não cabe');
+      });
+      document.querySelectorAll('#screen-lobby .brand-header .icon-btn').forEach(e => {
+        if (e.offsetWidth && (e.offsetWidth < 44 || e.offsetHeight < 44)) probs.push((e.id || 'icon-btn') + ' menor que 44px');
+      });
+      const head = document.querySelector('#screen-lobby .brand-header');
+      if (head.scrollWidth > head.clientWidth + 1) probs.push('cabeçalho não cabe');
+      out.push(v + ': ' + (probs.length ? [...new Set(probs)].join('; ') : 'OK'));
+      if (v === 'room') { document.getElementById('box-rules').style.display = 'none'; }
+    }
+    showView('home', { push: false });
+    return vw + 'x' + innerHeight + ' → ' + out.join(' | ');
+  };
+
   window.__testReady = true;
 })();

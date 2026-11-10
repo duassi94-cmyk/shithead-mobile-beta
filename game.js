@@ -477,6 +477,7 @@
       renderScoreboard();
       renderLobbySlots();
       refreshLogPanelUI();
+      showView('home', { replace: true });
 
       autoJoinFromUrl();
     }
@@ -775,6 +776,8 @@
           kickPlayer(slot.id);
         });
       });
+      renderRulesSummary();
+      if (currentView === 'home') renderHomeView();
     }
 
     // Volta a ser o "dono" da própria mesa local (depois de sair/ser removido de uma sala)
@@ -831,6 +834,7 @@
     const CONN_OPTS = { reliable: true, serialization: 'json' };
     let wakeLock = null;
     let joinRoomCode = '';
+    let guestJoinedRoom = ''; // sala em que o convidado entrou de fato (conexão aberta)
     let reconnectTimer = null;
 
     /* ---- Envio confiável -------------------------------------------------------
@@ -1060,8 +1064,7 @@
       if (!ping.inGame && inGameHere && G && G.phase !== 'GAMEOVER') {
         nlog('host_left_game');
         G = null;
-        document.getElementById('screen-game').classList.remove('active');
-        document.getElementById('screen-lobby').classList.add('active');
+        showLobbyAfterGame();
         setNetStatus('join-net-status', 'O host voltou para a sala. Aguardando nova partida...', 'info');
       }
     }
@@ -1343,8 +1346,10 @@
           if (joinAttempts > 1) netSend(conn, { type: 'NETLOG', what: 'reconnected', info: { attempt: joinAttempts, lastReason: lastLostReason } });
           lastLostReason = null;
           lastHostPingAt = Date.now();
-          setNetStatus('join-net-status', `✔ Na sala ${code}! Aguardando o host iniciar.`, 'ok');
+          setNetStatus('join-net-status', `✔ Na sala ${code}! Aguardando o host começar.`, 'ok');
           setGuestLobbyMode(true);
+          guestJoinedRoom = code;
+          if (!gameScreenActive() && currentView !== 'room') showView('room', { replace: currentView === 'invite' });
         });
         conn.on('data', (d) => { if (!conn.__stale) netReceive(conn, d, handleClientReceive); });
         conn.on('close', () => { if (!conn.__stale) handleHostLost('conn_close'); });
@@ -1379,13 +1384,21 @@
             reconnectTimer = setTimeout(() => { if (joinRoomCode && !(hostConn && hostConn.open)) joinRoom(joinRoomCode); }, wait);
             return;
           }
-          if (hostLostAt) {
+          const gaveUp = !!hostLostAt;
+          if (gaveUp) {
             nlog('host_gave_up', { waitedS: Math.round((Date.now() - hostLostAt) / 1000) });
-            setNetStatus('join-net-status', 'O host não voltou para a sala. Peça um link novo para jogar de novo.', 'error');
             showInvalidWarning('O host não voltou para a sala.');
             hostLostAt = 0;
           }
+          joinRoomCode = ''; // a sala não existe (mais): tentar de novo é pelo botão Entrar
           setGuestLobbyMode(false);
+          if (gaveUp) {
+            G = null;
+            showLobbyAfterGame();
+            setNetStatus('join-net-status', 'O host não voltou para a sala. Peça um link novo para jogar de novo.', 'error');
+          } else if (currentView === 'room') {
+            showView('home', { replace: true });
+          }
           return;
         }
         // Falha de rede/servidor (comum ao voltar da tela apagada): tenta de novo com
@@ -1454,12 +1467,9 @@
       const code = joinRoomCode;
       joinRoomCode = '';
       if (myPeer) { try { myPeer.destroy(); } catch (e) {} }
-      if (document.getElementById('screen-game').classList.contains('active')) {
-        G = null;
-        document.getElementById('screen-game').classList.remove('active');
-        document.getElementById('screen-lobby').classList.add('active');
-      }
+      if (gameScreenActive()) G = null;
       setGuestLobbyMode(false);
+      showLobbyAfterGame();
       if (hostProtocol > AppConfig.PROTOCOL) {
         let lastTry = 0;
         try { lastTry = Number(sessionStorage.getItem('sh_update_reload')) || 0; } catch (e) {}
@@ -1478,19 +1488,26 @@
 
     // Convidado: esconde o que só o host controla
     function setGuestLobbyMode(guest) {
-      document.getElementById('box-rules').style.display = guest ? 'none' : 'flex';
-      document.getElementById('btn-add-bot').style.display = guest ? 'none' : 'inline-block';
+      // O editor de regras fecha ao trocar de papel; o convidado vê as regras só para leitura
+      document.getElementById('box-rules').style.display = 'none';
+      document.getElementById('btn-rules-custom').setAttribute('aria-expanded', 'false');
+      document.getElementById('btn-rules-custom').hidden = guest;
+      document.getElementById('rule-presets').hidden = guest;
+      document.getElementById('btn-add-bot').style.display = guest ? 'none' : '';
       document.querySelector('.sim-row').style.display = guest ? 'none' : 'flex';
-      document.getElementById('btn-tutorial').style.display = guest ? 'none' : 'block';
+      document.getElementById('btn-tutorial').hidden = guest;
       document.getElementById('btn-create-host').disabled = guest;
       const startBtn = document.getElementById('btn-start-match');
       startBtn.disabled = guest;
-      startBtn.textContent = guest ? 'Aguardando o host iniciar...' : 'Iniciar Partida';
+      document.getElementById('lbl-start-match').textContent = guest ? 'Aguardando o host começar...' : 'Começar partida';
+      if (!guest) roomRules = null;
+      renderRulesSummary();
     }
 
     document.getElementById('btn-create-host').addEventListener('click', () => {
       SoundEngine.init();
       createHostRoom();
+      showView('room');
     });
 
     document.getElementById('btn-show-join').addEventListener('click', () => {
@@ -1580,7 +1597,9 @@
       roomLocked = !!locked;
       const btn = document.getElementById('btn-lock-room');
       if (btn) {
-        btn.textContent = roomLocked ? '🔒 Sala trancada — toque para destrancar' : '🔓 Sala aberta — toque para trancar';
+        btn.innerHTML = roomLocked
+          ? '<svg class="ico"><use href="#i-lock"/></svg> Sala trancada — toque para destrancar'
+          : '<svg class="ico"><use href="#i-unlock"/></svg> Sala aberta — toque para trancar';
         btn.setAttribute('aria-pressed', roomLocked ? 'true' : 'false');
         btn.classList.toggle('btn-locked', roomLocked);
       }
@@ -1718,7 +1737,7 @@
         NetLog.count('resync_request');
         // Convidado perdeu alguma mensagem: reenvia a mesa (ou o lobby)
         if (hostInGame()) netSend(conn, { type: 'STATE_SYNC', state: stateForNet(conn.__playerId), fx: null });
-        else netSend(conn, { type: 'LOBBY_SYNC', slots: lobbySlots });
+        else netSend(conn, { type: 'LOBBY_SYNC', slots: lobbySlots, rules: getRulesFromUI() });
       } else if (data.type === 'ACTION') {
         // Só aceita ações do próprio jogador daquela conexão, com formato conhecido
         if (!conn.__playerId || data.playerId !== conn.__playerId) return;
@@ -1759,6 +1778,7 @@
         if (!Array.isArray(data.slots)) return;
         const slots = data.slots.slice(0, 6).map(sanitizeSlot).filter(Boolean);
         if (slots.length) lobbySlots = slots;
+        if (data.rules && typeof data.rules === 'object') roomRules = sanitizeRules(data.rules);
         renderLobbySlots();
       } else if (data.type === 'PING') {
         // Host com outra versão do formato das mensagens: não dá para continuar
@@ -1773,6 +1793,7 @@
         joinRoomCode = '';
         if (hostConn) hostConn.__stale = true;
         setGuestLobbyMode(false);
+        if (currentView === 'room') showView('home', { replace: true });
       } else if (data.type === 'LOBBY_LOCK') {
         const el = document.getElementById('join-net-status');
         if (el && joinRoomCode) setNetStatus('join-net-status', data.locked ? `✔ Na sala ${joinRoomCode} (trancada pelo host). Aguardando o host iniciar.` : `✔ Na sala ${joinRoomCode}! Aguardando o host iniciar.`, 'ok');
@@ -1818,13 +1839,25 @@
         resetToLocalLobby();
         setNetStatus('join-net-status', 'O host removeu você da sala.', 'error');
         setGuestLobbyMode(false);
-        document.getElementById('screen-game').classList.remove('active');
-        document.getElementById('screen-lobby').classList.add('active');
+        showLobbyAfterGame();
+      } else if (data.type === 'ROOM_CLOSED') {
+        // O host fechou a sala (botão "Fechar sala")
+        nlog('room_closed_by_host');
+        joinRoomCode = '';
+        hostLostAt = 0;
+        clearTimeout(reconnectTimer);
+        if (hostConn) hostConn.__stale = true;
+        if (myPeer) { try { myPeer.destroy(); } catch (e) {} }
+        resetToLocalLobby();
+        setGuestLobbyMode(false);
+        setNetStatus('join-net-status', 'O host fechou a sala.', 'warn');
+        showLobbyAfterGame();
       } else if (data.type === 'ROOM_FULL') {
         nlog('room_full');
         setNetStatus('join-net-status', 'A sala está cheia (6 jogadores).', 'error');
         joinRoomCode = '';
         setGuestLobbyMode(false);
+        if (currentView === 'room') showView('home', { replace: true });
       }
     }
 
@@ -1834,7 +1867,8 @@
     }
 
     function broadcastLobby() {
-      clientConns.forEach(c => { if (!c.__playerId) return; try { netSend(c, { type: 'LOBBY_SYNC', slots: lobbySlots }); } catch (e) {} });
+      const rules = getRulesFromUI();
+      clientConns.forEach(c => { if (!c.__playerId) return; try { netSend(c, { type: 'LOBBY_SYNC', slots: lobbySlots, rules }); } catch (e) {} });
     }
 
     function broadcastState(fx = null) {
@@ -1857,15 +1891,17 @@
           // Link de uma versão antiga (código de 4 números) ou digitado errado
           document.getElementById('join-box').style.display = 'flex';
           setNetStatus('join-net-status', 'Este link de sala não é válido nesta versão do jogo. Peça um link novo ao host.', 'error');
+          showView('home', { replace: true });
         }
         return;
       }
-      document.getElementById('join-box').style.display = 'flex';
       document.getElementById('inp-room-code').value = sala;
-      document.getElementById('join-invite-banner').style.display = 'block';
       document.getElementById('lbl-invite-code').textContent = sala;
-      // Entra na hora; se o nome ainda for o padrão, dá para trocar depois (o host é avisado)
-      joinRoom(sala);
+      showView('invite', { replace: true });
+      // Quem já tem nome neste aparelho entra na hora (também ao recarregar a página durante
+      // a partida); quem chega pela primeira vez confere nome e foto e toca em Entrar
+      if (Store.get('sh_player_name')) joinRoom(sala);
+      else document.getElementById('inp-name').focus();
     }
 
     function sendProfileToHost() {
@@ -3262,6 +3298,334 @@
     }
 
     /* ==========================================================================
+       TELAS DE ENTRADA: Início, Convite, Sala, Placar e Ajustes
+       Uma "vista" ativa por vez dentro da tela de entrada (#screen-lobby). Cada troca
+       entra no histórico do navegador: o botão voltar do celular volta para a vista
+       anterior em vez de fechar o jogo. O perfil (foto e nome) e os avisos de conexão
+       são um bloco só, colocado na vista ativa.
+       ========================================================================== */
+    const LOBBY_VIEWS = ['home', 'invite', 'room', 'board', 'settings'];
+    let currentView = 'home';
+    let viewDepth = 0; // quantas vistas o jogo empilhou no histórico (voltar não sai do jogo)
+
+    // Numa sala online: host com sala aberta ou convidado ligado a uma sala
+    function inRoom() {
+      return isHost ? !!roomCode : (!!joinRoomCode && guestJoinedRoom === joinRoomCode);
+    }
+    const gameScreenActive = () => document.getElementById('screen-game').classList.contains('active');
+
+    function showView(name, { push = true, replace = false } = {}) {
+      if (!LOBBY_VIEWS.includes(name)) name = 'home';
+      const prev = currentView;
+      currentView = name;
+      document.querySelectorAll('.lobby-view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
+      const view = document.getElementById('view-' + name);
+      const profile = document.getElementById('profile-card');
+      const profileSlot = view.querySelector('.profile-slot');
+      if (profileSlot) profileSlot.appendChild(profile);
+      profile.hidden = !profileSlot;
+      const statusSlot = view.querySelector('.status-slot');
+      if (statusSlot) statusSlot.appendChild(document.getElementById('join-net-status'));
+      document.getElementById('btn-view-back').hidden = name === 'home';
+      document.querySelector('#screen-lobby .brand-header').classList.toggle('has-back', name !== 'home');
+      const subs = { invite: 'Convite para uma sala', board: 'Placar', settings: 'Ajustes' };
+      document.getElementById('lbl-brand-sub').textContent = name === 'home' ? `build ${AppConfig.BUILD}`
+        : (name === 'room' ? (inRoom() ? (isHost ? 'Sua sala online' : 'Sala online') : 'Mesa e regras') : subs[name]);
+      if (name === 'home') renderHomeView();
+      else if (name === 'room') renderRoomView();
+      else if (name === 'board') renderScoreboard();
+      else if (name === 'settings') renderSettingsView();
+      if (name !== prev) {
+        const sp = view.querySelector('.scroll-panel');
+        if (sp) sp.scrollTop = 0;
+      }
+      try {
+        if (replace) history.replaceState({ view: name }, '', '#' + name);
+        else if (push && name !== prev) { history.pushState({ view: name }, '', '#' + name); viewDepth++; }
+      } catch (e) { /* histórico indisponível (ex.: arquivo local): segue sem ele */ }
+    }
+
+    // Botão voltar (do celular ou do navegador)
+    window.addEventListener('popstate', (e) => {
+      if (gameScreenActive()) {
+        // Na mesa, voltar não tira ninguém da partida sem querer
+        try { history.pushState({ view: 'game' }, '', '#jogo'); } catch (err) {}
+        showInvalidWarning('Para sair da partida, toque em Sair.');
+        return;
+      }
+      viewDepth = Math.max(0, viewDepth - 1);
+      const v = e.state && e.state.view;
+      showView(LOBBY_VIEWS.includes(v) ? v : 'home', { push: false });
+    });
+    document.getElementById('btn-view-back').addEventListener('click', () => {
+      if (viewDepth > 0) history.back();
+      else showView('home', { replace: true });
+    });
+
+    // Entrou na mesa: cria uma entrada no histórico. Sem ela, o voltar do celular na
+    // primeira página fecharia o jogo no meio da partida (com ela, cai no aviso acima).
+    new MutationObserver(() => {
+      if (gameScreenActive() && !(history.state && history.state.view === 'game')) {
+        try { history.pushState({ view: 'game' }, '', '#jogo'); viewDepth++; } catch (e) {}
+      }
+    }).observe(document.getElementById('screen-game'), { attributes: true, attributeFilter: ['class'] });
+
+    // Volta para a entrada depois da mesa: a sala, se ainda estiver numa; senão o início
+    function showLobbyAfterGame() {
+      document.getElementById('screen-game').classList.remove('active');
+      document.getElementById('screen-lobby').classList.add('active');
+      showView(inRoom() ? 'room' : 'home', { replace: true });
+    }
+
+    function renderHomeView() {
+      const room = inRoom();
+      const code = isHost ? roomCode : joinRoomCode;
+      const banner = document.getElementById('btn-back-to-room');
+      banner.hidden = !room;
+      if (room) {
+        document.getElementById('lbl-back-to-room').textContent = isHost ? `Sua sala ${code} está aberta` : `Você está na sala ${code}`;
+      }
+      // Numa sala, os caminhos de começar outra coisa ficam escondidos (evita confusão)
+      ['btn-play-bots', 'btn-create-host', 'btn-show-join'].forEach(id => { document.getElementById(id).hidden = room; });
+      if (room) document.getElementById('join-box').style.display = 'none';
+      const bots = lobbySlots.filter(s => s.type === 'bot').length;
+      const preset = presetFor(currentLobbyRules());
+      document.getElementById('lbl-play-bots-sub').textContent =
+        `${bots} bot${bots === 1 ? '' : 's'} · regras ${preset ? preset.name : 'personalizadas'} · começa na hora`;
+    }
+
+    function renderRoomView() {
+      const room = inRoom();
+      if (currentView === 'room') {
+        document.getElementById('lbl-brand-sub').textContent = room ? (isHost ? 'Sua sala online' : 'Sala online') : 'Mesa e regras';
+      }
+      const box = document.getElementById('box-online');
+      box.style.display = room ? 'flex' : 'none';
+      if (room) {
+        const code = isHost ? roomCode : joinRoomCode;
+        document.getElementById('lbl-room-title').textContent = `Sala ${code}`;
+        document.getElementById('lbl-leave-room').textContent = isHost ? 'Fechar sala' : 'Sair da sala';
+        if (!isHost) document.getElementById('host-qr-box').style.display = 'none';
+      }
+      renderRulesSummary();
+    }
+
+    document.getElementById('btn-open-settings').addEventListener('click', () => showView('settings'));
+    document.getElementById('btn-open-board').addEventListener('click', () => showView('board'));
+    document.getElementById('btn-open-table').addEventListener('click', () => showView('room'));
+    document.getElementById('btn-back-to-room').addEventListener('click', () => showView('room'));
+    document.getElementById('btn-avatar-menu').addEventListener('click', () => {
+      const box = document.getElementById('photo-actions');
+      box.hidden = !box.hidden;
+    });
+
+    // Jogar contra bots: começa na hora, com os lugares e as regras guardados
+    document.getElementById('btn-play-bots').addEventListener('click', () => {
+      if (!isHost || inRoom()) return;
+      SoundEngine.init();
+      while (lobbySlots.length < 3) document.getElementById('btn-add-bot').click();
+      startNewMatch(false, 'normal');
+    });
+
+    /* ---- Sair da sala (convidado) / fechar a sala (host) ----------------------------- */
+    function leaveRoom() {
+      if (isHost && roomCode) {
+        nlog('room_closed', { guests: joinedConns().length });
+        joinedConns().forEach(c => { try { netSend(c, { type: 'ROOM_CLOSED' }); } catch (e) {} });
+        const conns = clientConns.slice();
+        conns.forEach(c => { c.__kicked = true; });
+        clientConns = [];
+        const peer = myPeer;
+        myPeer = null;
+        clearTimeout(hostRetryTimer);
+        setTimeout(() => {
+          conns.forEach(c => { try { c.close(); } catch (e) {} });
+          if (peer) { try { peer.destroy(); } catch (e) {} }
+        }, 300);
+        roomCode = '';
+        setRoomLocked(false);
+        Object.keys(guestSecrets).forEach(k => { delete guestSecrets[k]; });
+        lobbySlots = lobbySlots.filter(s => s.type === 'bot' || s.id === myPlayerId);
+        document.getElementById('host-qr-box').style.display = 'none';
+        setNetStatus('host-net-status', '', 'info');
+        renderLobbySlots();
+      } else if (!isHost && joinRoomCode) {
+        nlog('room_left');
+        joinRoomCode = '';
+        hostLostAt = 0;
+        clearTimeout(reconnectTimer);
+        if (hostConn) { hostConn.__stale = true; try { hostConn.close(); } catch (e) {} }
+        if (myPeer) { try { myPeer.destroy(); } catch (e) {} }
+        hostConn = null;
+        myPeer = null;
+        resetToLocalLobby();
+        setGuestLobbyMode(false);
+        setNetStatus('join-net-status', '', 'info');
+      }
+      showView('home', { replace: true });
+    }
+    document.getElementById('btn-leave-room').addEventListener('click', () => {
+      if (isHost && joinedConns().length && !window.confirm('Fechar a sala? Os convidados serão desconectados.')) return;
+      leaveRoom();
+    });
+
+    /* ---- Regras: estilos prontos (atalhos que preenchem os mesmos campos) ----------- */
+    const RULE_PRESETS = [
+      { id: 'casa', name: 'Da casa', desc: '1 Coringa que gira as mãos · 10 queima e passa a vez · 4 iguais invertem',
+        rules: { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false } },
+      { id: 'classico', name: 'Clássico', desc: 'Sem Coringa · 10 queima e você joga de novo · 4 iguais invertem e queimam',
+        rules: { decks: 1, jokers: 0, p2: true, draw2: 1, p7: true, p10: true, after10: 'again', pjoker: false, multijoker: 'once', p48: true, mode48: 'sequence', burn48: true } },
+      { id: 'caotico', name: 'Caótico', desc: '2 Coringas, cada um gira as mãos · 2 com a mão vazia compra 3 · iguais juntas invertem e queimam',
+        rules: { decks: 1, jokers: 2, p2: true, draw2: 3, p7: true, p10: true, after10: 'again', pjoker: true, multijoker: 'per_joker', p48: true, mode48: 'together', burn48: true } }
+    ];
+    let roomRules = null; // convidado: regras que o host mandou
+
+    // Regras que valem na sala agora (convidado: as do host; host/local: as da tela)
+    function currentLobbyRules() {
+      return isHost ? getRulesFromUI() : roomRules;
+    }
+
+    // Com 6 jogadores o jogo usa 2 baralhos: a predefinição continua valendo
+    function presetFor(rules) {
+      if (!rules) return null;
+      return RULE_PRESETS.find(p => Object.keys(p.rules).every(k =>
+        (k === 'decks' && lobbySlots.length >= 6) || rules[k] === p.rules[k])) || null;
+    }
+
+    function applyPreset(id) {
+      const p = RULE_PRESETS.find(x => x.id === id);
+      if (!p || !isHost) return;
+      const r = p.rules;
+      document.getElementById('sel-decks').value = String(r.decks);
+      document.getElementById('chk-pjoker').checked = r.pjoker;
+      document.getElementById('sel-jokers').value = String(r.jokers);
+      document.getElementById('chk-p2').checked = r.p2;
+      document.getElementById('sel-draw2').value = String(r.draw2);
+      document.getElementById('chk-p7').checked = r.p7;
+      document.getElementById('chk-p10').checked = r.p10;
+      document.getElementById('sel-after10').value = r.after10;
+      document.getElementById('sel-multijoker').value = r.multijoker;
+      document.getElementById('chk-p48').checked = r.p48;
+      document.getElementById('sel-48mode').value = r.mode48;
+      document.getElementById('chk-48burn').checked = r.burn48;
+      syncBigPileInput(r.decks);
+      onRulesEdited();
+      nlog('rules_preset', { preset: id });
+    }
+
+    function rulesListHtml(rules) {
+      return LoggerModule.describeRules(rules).map(t => `<li>${esc(t)}</li>`).join('');
+    }
+
+    function renderRulesSummary() {
+      const rules = currentLobbyRules();
+      const preset = presetFor(rules);
+      document.getElementById('lbl-rules-preset').textContent = rules ? (preset ? preset.name : 'Personalizado') : '...';
+      document.getElementById('room-rules-list').innerHTML = rules
+        ? rulesListHtml(rules)
+        : '<li>Aguardando as regras do host...</li>';
+      const list = document.getElementById('rule-presets');
+      if (!list.hidden) {
+        list.innerHTML = RULE_PRESETS.map(p => `
+          <button type="button" class="preset-btn" role="radio" data-preset="${p.id}" aria-checked="${preset && preset.id === p.id ? 'true' : 'false'}">
+            <b>${esc(p.name)}</b><small>${esc(p.desc)}</small>
+          </button>`).join('');
+      }
+    }
+    document.getElementById('rule-presets').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-preset]');
+      if (b) { SoundEngine.select(); applyPreset(b.dataset.preset); }
+    });
+    document.getElementById('btn-rules-custom').addEventListener('click', () => {
+      const box = document.getElementById('box-rules');
+      const open = box.style.display === 'none';
+      box.style.display = open ? 'flex' : 'none';
+      document.getElementById('btn-rules-custom').setAttribute('aria-expanded', String(open));
+      if (open) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // Qualquer mudança nas regras: guarda, atualiza o resumo e avisa os convidados
+    let rulesBroadcastTimer = null;
+    function onRulesEdited() {
+      getRulesFromUI();
+      syncBurnWarning();
+      renderRulesSummary();
+      renderHomeView();
+      if (isHost && roomCode) {
+        clearTimeout(rulesBroadcastTimer);
+        rulesBroadcastTimer = setTimeout(broadcastLobby, 300);
+      }
+    }
+    document.getElementById('box-rules').addEventListener('change', onRulesEdited);
+
+    /* ---- "Regras desta mesa" (na partida, junto do placar) --------------------------- */
+    function setOverlayTab(tab) {
+      document.querySelectorAll('[data-overlay-tab]').forEach(b => {
+        const on = b.dataset.overlayTab === tab;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', String(on));
+      });
+      document.getElementById('overlay-pane-board').hidden = tab !== 'board';
+      document.getElementById('overlay-pane-rules').hidden = tab !== 'rules';
+      if (tab === 'rules') {
+        document.getElementById('overlay-rules-list').innerHTML = G && G.rules ? rulesListHtml(G.rules) : '<li>Sem partida em andamento.</li>';
+      }
+    }
+    document.querySelectorAll('[data-overlay-tab]').forEach(b => b.addEventListener('click', () => setOverlayTab(b.dataset.overlayTab)));
+
+    /* ---- Ajustes: instalar no celular, diagnóstico, versão --------------------------- */
+    let deferredInstall = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); // o jogo mostra o próprio botão "Instalar" em Ajustes
+      deferredInstall = e;
+      if (currentView === 'settings') renderInstallBox();
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstall = null;
+      nlog('app_installed');
+      renderInstallBox();
+    });
+    function isStandalone() {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+    }
+    function renderInstallBox() {
+      const ua = navigator.userAgent || '';
+      const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const installed = isStandalone();
+      document.getElementById('lbl-install-status').textContent = installed
+        ? 'O jogo já está instalado neste aparelho e abre em tela cheia.'
+        : (deferredInstall ? 'Instale para abrir em tela cheia, direto da tela inicial, mesmo sem internet para jogar contra bots.'
+          : (ios ? 'No iPhone e no iPad, a instalação é pelo Safari:' : 'Instale pelo menu do navegador:'));
+      document.getElementById('btn-install').hidden = installed || !deferredInstall;
+      document.getElementById('install-ios').hidden = installed || !ios;
+      document.getElementById('install-other').hidden = installed || ios || !!deferredInstall;
+    }
+    document.getElementById('btn-install').addEventListener('click', () => {
+      if (!deferredInstall) return;
+      const ev = deferredInstall;
+      ev.prompt();
+      ev.userChoice.then((c) => {
+        nlog('install_choice', { outcome: c && c.outcome });
+        deferredInstall = null;
+        renderInstallBox();
+      }, () => {});
+    });
+    function renderSettingsView() {
+      renderInstallBox();
+      refreshLogPanelUI();
+      document.getElementById('lbl-about').textContent =
+        `Shithead! · build ${AppConfig.BUILD}${AppConfig.ENV !== 'prod' ? ' (' + AppConfig.ENV + ')' : ''}. ` +
+        'Jogue com amigos (conexão direta entre os aparelhos) ou contra bots.';
+    }
+
+    /* ---- Convite: quem abriu o link ou leu o QR Code --------------------------------- */
+    document.getElementById('btn-join-invite').addEventListener('click', () => {
+      SoundEngine.init();
+      joinRoom(document.getElementById('inp-room-code').value);
+    });
+    document.getElementById('btn-invite-home').addEventListener('click', () => showView('home', { replace: true }));
+
+    /* ==========================================================================
        12. EVENTOS DE INTERFACE E UPLOAD DE FOTO
        ========================================================================== */
     document.getElementById('btn-mute-lobby').addEventListener('click', () => SoundEngine.toggleMute());
@@ -3276,6 +3640,7 @@
     }
     document.getElementById('btn-board-game').addEventListener('click', () => {
       renderBoardOverlay();
+      setOverlayTab('board');
       document.getElementById('board-overlay').classList.add('show');
     });
     const closeBoardOverlay = () => document.getElementById('board-overlay').classList.remove('show');
@@ -3599,8 +3964,7 @@
       if (G && G.phase !== 'GAMEOVER') G.phase = 'ABANDONED'; // para os bots
       saveHostResume(); // partida abandonada: não há o que retomar
       document.getElementById('modal-gameover').classList.remove('active');
-      document.getElementById('screen-game').classList.remove('active');
-      document.getElementById('screen-lobby').classList.add('active');
+      showLobbyAfterGame();
       refreshLogPanelUI();
     }
 
@@ -3610,8 +3974,7 @@
     NetLog.log('app_start', { version: AppConfig.VERSION, build: AppConfig.BUILD, device: getDeviceId().slice(-6), viaInvite: /[?&]sala=/.test(location.search), env: AppConfig.ENV, protocol: AppConfig.PROTOCOL });
     // Mostra a versão/build no topo do lobby (ajuda a saber qual versão o celular está rodando)
     (() => {
-      const p = document.querySelector('.brand-title-wrap p');
-      if (p) p.textContent = `build ${AppConfig.BUILD} · P2P Mobile & Desktop`;
+      // (o subtítulo do topo é escrito por showView: build no Início, nome da tela nas outras)
       // Selo BETA / LOCAL: deixa claro que não é a versão oficial (salas separadas)
       const badge = document.getElementById('lbl-env-badge');
       if (badge && AppConfig.ENV !== 'prod') {

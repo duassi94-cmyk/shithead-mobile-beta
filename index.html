@@ -13,6 +13,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Shithead!</title>
   <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="style.css" />
   <script src="vendor/peerjs.min.js"></script>
   <script src="vendor/qrcode.min.js"></script>
@@ -20,6 +23,36 @@
   <link rel="preload" href="game.js" as="script" />
 </head>
 <body>
+  <!-- Ícones (SVG): desenhados aqui, usados com <svg class="ico"><use href="#i-nome"/></svg>.
+       Traço na cor do texto (currentColor): se ajustam a qualquer botão. -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M19.22 10.39 L21.92 10.70 L21.92 13.30 L19.22 13.61 L18.25 15.96 L19.93 18.09 L18.09 19.93 L15.96 18.25 L13.61 19.22 L13.30 21.92 L10.70 21.92 L10.39 19.22 L8.04 18.25 L5.91 19.93 L4.07 18.09 L5.75 15.96 L4.78 13.61 L2.08 13.30 L2.08 10.70 L4.78 10.39 L5.75 8.04 L4.07 5.91 L5.91 4.07 L8.04 5.75 L10.39 4.78 L10.70 2.08 L13.30 2.08 L13.61 4.78 L15.96 5.75 L18.09 4.07 L19.93 5.91 L18.25 8.04Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9l6 6M22 9l-6 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14a6.5 6.5 0 0 1 3 6"/></symbol>
+    <symbol id="i-enter" viewBox="0 0 24 24"><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><path d="M9 17l5-5-5-5M14 12H3"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5"/><path d="M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-cap" viewBox="0 0 24 24"><path d="M2 9.5L12 5l10 4.5L12 14z"/><path d="M6 11.5v4.5c3.5 2.5 8.5 2.5 12 0v-4.5M22 9.5V15"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 6h3v1.5A3.5 3.5 0 0 1 16.6 11M7 6H4v1.5A3.5 3.5 0 0 0 7.4 11M12 14v4M8 21h8M9 18h6"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="7"/><path d="M9.5 10.5h5v3h-5z"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8.5h4l1.8-2.5h6.4L17 8.5h4V19H3z"/><circle cx="12" cy="13.5" r="3.3"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.8"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4M12 2v13"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.7-1.5"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3z"/><path d="M21 5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-fast" viewBox="0 0 24 24"><path d="M3 5.5v13l8.5-6.5zM12 5.5v13l8.5-6.5z" fill="currentColor"/></symbol>
+  </svg>
+
 
   <div id="fx-layer"></div>
 
@@ -39,201 +72,297 @@
   <div id="toast-warning">Jogada inválida!</div>
 
   <div class="app-shell">
-    <!-- TELA 1: MENU & CONFIGURAÇÃO DA SALA -->
+    <!-- TELA 1: ENTRADA (Início, Convite, Sala, Ajustes, Placar)
+         Cada parte é uma "vista" dentro da mesma tela; o botão voltar do celular volta
+         para a vista anterior (histórico do navegador). Os controles mantêm os mesmos
+         IDs de antes (o jogo e as ferramentas de teste usam esses IDs). -->
     <div id="screen-lobby" class="screen active">
       <div class="brand-header">
+        <button id="btn-view-back" class="icon-btn" type="button" aria-label="Voltar" hidden><svg class="ico"><use href="#i-back"/></svg></button>
         <div class="brand-title-wrap">
           <h1>SHITHEAD! <span id="lbl-env-badge" class="env-badge" hidden></span></h1>
-          <p>P2P Mobile &amp; Desktop</p>
+          <p id="lbl-brand-sub">Jogo de cartas com amigos ou contra bots</p>
         </div>
-        <button id="btn-mute-lobby" class="btn btn-secondary" style="padding:7px 11px; font-size:0.8rem;">🔊 Som</button>
+        <div class="brand-actions">
+          <button id="btn-mute-lobby" class="icon-btn" type="button" aria-label="Som"><svg class="ico"><use href="#i-sound"/></svg></button>
+          <button id="btn-open-settings" class="icon-btn" type="button" aria-label="Ajustes"><svg class="ico"><use href="#i-settings"/></svg></button>
+        </div>
       </div>
 
-      <div class="scroll-panel">
-        <!-- Partida interrompida (host recarregou a página): oferta de retomada -->
-        <div id="resume-box" class="card-box resume-box" style="display:none;" role="region" aria-label="Partida interrompida">
-          <h2>Partida interrompida</h2>
-          <div id="lbl-resume" class="resume-text"></div>
-          <div class="row" style="gap:6px;">
-            <button id="btn-resume" class="btn btn-success" style="flex:1;">▶ Retomar partida</button>
-            <button id="btn-resume-discard" class="btn btn-secondary">Descartar</button>
+      <!-- Perfil: um só bloco, colocado na vista ativa (Início ou Convite) -->
+      <div id="profile-card" class="card-box profile-card">
+        <div class="avatar-preview-wrap">
+          <button type="button" id="btn-avatar-menu" class="avatar-btn" aria-label="Trocar foto">
+            <img id="img-my-avatar" class="avatar-img" alt="Sua foto" />
+            <span class="avatar-edit"><svg class="ico"><use href="#i-camera"/></svg></span>
+          </button>
+          <div class="profile-fields">
+            <label for="inp-name" class="field-label">Seu nome</label>
+            <input type="text" id="inp-name" maxlength="24" placeholder="Como os outros vão te ver" autocomplete="nickname" />
           </div>
         </div>
+        <div id="photo-actions" class="photo-actions" hidden>
+          <button id="btn-camera-photo" class="btn btn-secondary btn-sm" type="button"><svg class="ico"><use href="#i-camera"/></svg> Câmera</button>
+          <button id="btn-gallery-photo" class="btn btn-secondary btn-sm" type="button"><svg class="ico"><use href="#i-image"/></svg> Arquivo</button>
+          <button id="btn-reset-photo" class="btn btn-secondary btn-sm" type="button">Padrão</button>
+        </div>
+        <input type="file" id="inp-file-camera" accept="image/jpeg,image/png,image/webp" capture="user" style="display:none;" />
+        <input type="file" id="inp-file-gallery" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+      </div>
 
-        <!-- Perfil e Foto do Jogador -->
-        <div class="card-box">
-          <h2>Seu Perfil e Foto</h2>
-          <div class="avatar-preview-wrap">
-            <img id="img-my-avatar" class="avatar-img" alt="Avatar" />
-            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-              <input type="text" id="inp-name" maxlength="24" placeholder="Seu Nome" />
-              <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button id="btn-camera-photo" class="btn btn-secondary" style="padding:5px 10px; font-size:0.75rem;">📷 Câmera</button>
-                <button id="btn-gallery-photo" class="btn btn-secondary" style="padding:5px 10px; font-size:0.75rem;">📁 Arquivo</button>
-                <button id="btn-reset-photo" class="btn btn-secondary" style="padding:5px 10px; font-size:0.75rem;">Padrão</button>
-              </div>
-              <input type="file" id="inp-file-camera" accept="image/jpeg,image/png,image/webp" capture="user" style="display:none;" />
-              <input type="file" id="inp-file-gallery" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+      <!-- Avisos de conexão do convidado: um só, colocado na vista ativa -->
+      <div id="join-net-status" class="net-status" style="display:none;" role="status" aria-live="polite"></div>
+
+      <!-- ===== INÍCIO ===== -->
+      <section id="view-home" class="lobby-view active" data-view="home" aria-label="Início">
+        <div class="scroll-panel">
+          <div class="profile-slot"></div>
+
+          <!-- Partida interrompida (host recarregou a página): oferta de retomada -->
+          <div id="resume-box" class="card-box resume-box" style="display:none;" role="region" aria-label="Partida interrompida">
+            <h2>Partida interrompida</h2>
+            <div id="lbl-resume" class="resume-text"></div>
+            <div class="row" style="gap:6px;">
+              <button id="btn-resume" class="btn btn-success" style="flex:1;"><svg class="ico"><use href="#i-play"/></svg> Retomar partida</button>
+              <button id="btn-resume-discard" class="btn btn-secondary">Descartar</button>
             </div>
           </div>
-          <div style="font-size:0.7rem; color:var(--text-dim);">📷 Câmera tira a foto aqui mesmo no navegador. 📁 Arquivo aceita JPG, PNG ou WebP (ajustado para 96x96px).</div>
-        </div>
 
-        <!-- Conexão P2P -->
-        <div class="card-box">
-          <h2>Modo de Conexão P2P</h2>
-          <div class="row" style="gap:6px;">
-            <button id="btn-create-host" class="btn" style="flex:1;">Criar Sala (Host)</button>
-            <button id="btn-show-join" class="btn btn-secondary" style="flex:1;">Entrar em Sala</button>
+          <!-- Já numa sala: atalho de volta -->
+          <button id="btn-back-to-room" class="room-banner" type="button" hidden>
+            <span><b id="lbl-back-to-room">Você está numa sala</b><small>Toque para voltar à sala</small></span>
+            <svg class="ico"><use href="#i-forward"/></svg>
+          </button>
+
+          <div id="home-actions" class="home-actions">
+            <button id="btn-play-bots" class="hero-btn hero-primary" type="button">
+              <svg class="ico hero-ico"><use href="#i-play"/></svg>
+              <span><b>Jogar contra bots</b><small id="lbl-play-bots-sub">Começa na hora</small></span>
+            </button>
+            <button id="btn-create-host" class="hero-btn" type="button">
+              <svg class="ico hero-ico"><use href="#i-users"/></svg>
+              <span><b>Criar sala</b><small>Chame amigos pelo link ou QR Code</small></span>
+            </button>
+            <button id="btn-show-join" class="hero-btn" type="button">
+              <svg class="ico hero-ico"><use href="#i-enter"/></svg>
+              <span><b>Entrar com código</b><small>Alguém já criou a sala</small></span>
+            </button>
+            <div id="join-box" class="join-box" style="display:none;">
+              <div class="row">
+                <input type="text" id="inp-room-code" class="room-code-input" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="7" placeholder="Código (ex: KX7RD)" aria-label="Código da sala" style="flex:1;" />
+                <button id="btn-connect-peer" class="btn btn-success">Entrar</button>
+              </div>
+            </div>
+          </div>
+          <div class="status-slot" data-for="home"></div>
+
+          <nav class="home-links" aria-label="Mais opções">
+            <button id="btn-tutorial" class="link-btn" type="button"><svg class="ico"><use href="#i-cap"/></svg><span>Tutorial</span></button>
+            <button id="btn-open-board" class="link-btn" type="button"><svg class="ico"><use href="#i-trophy"/></svg><span>Placar</span></button>
+            <button id="btn-open-table" class="link-btn" type="button"><svg class="ico"><use href="#i-table"/></svg><span>Mesa e regras</span></button>
+          </nav>
+        </div>
+      </section>
+
+      <!-- ===== CONVITE (quem abriu o link ou leu o QR) ===== -->
+      <section id="view-invite" class="lobby-view" data-view="invite" aria-label="Convite">
+        <div class="scroll-panel">
+          <div id="join-invite-banner" class="invite-hero">
+            <svg class="ico invite-ico"><use href="#i-users"/></svg>
+            <div>Você foi convidado para a sala <b id="lbl-invite-code">-----</b></div>
+            <small>Confira seu nome e sua foto: é assim que os outros vão te ver.</small>
+          </div>
+          <div class="profile-slot"></div>
+          <button id="btn-join-invite" class="btn btn-success btn-big" type="button"><svg class="ico"><use href="#i-enter"/></svg> Entrar na sala</button>
+          <div class="status-slot" data-for="invite"></div>
+          <button id="btn-invite-home" class="link-btn link-center" type="button">Agora não — ir para o início</button>
+        </div>
+      </section>
+
+      <!-- ===== SALA (host online, convidado ou mesa local) ===== -->
+      <section id="view-room" class="lobby-view" data-view="room" aria-label="Sala">
+        <div class="scroll-panel">
+          <div id="box-online" class="card-box" style="display:none;">
+            <div class="row">
+              <h2 id="lbl-room-title">Sala</h2>
+              <button id="btn-leave-room" class="btn btn-secondary btn-xs" type="button"><svg class="ico"><use href="#i-exit"/></svg> <span id="lbl-leave-room">Sair da sala</span></button>
+            </div>
+            <div id="host-qr-box" style="display:none; flex-direction:column; align-items:center; gap:6px;">
+              <div class="room-code-line">Código: <strong id="lbl-room-code">-----</strong></div>
+              <div id="qr-container"></div>
+              <div id="lbl-invite-url" class="invite-url"></div>
+              <button id="btn-share-invite" class="btn btn-success" style="width:100%;"><svg class="ico"><use href="#i-share"/></svg> Enviar convite (WhatsApp, etc.)</button>
+              <button id="btn-lock-room" class="btn btn-secondary" style="width:100%;" aria-pressed="false">Sala aberta — toque para trancar</button>
+              <div class="hint-text">Quem abrir o link ou ler o QR Code com a câmera entra direto na sala.</div>
+            </div>
+            <div id="host-net-status" class="net-status" style="display:none;"></div>
+            <div class="status-slot" data-for="room"></div>
           </div>
 
-          <div id="join-box" style="display:none; flex-direction:column; gap:8px; margin-top:6px;">
-            <div id="join-invite-banner" class="invite-banner" style="display:none;">
-              🎉 Você foi convidado para a sala <b id="lbl-invite-code">----</b>! Confira seu nome e foto acima — o host vê as mudanças na hora.
+          <!-- Jogadores na Sala -->
+          <div class="card-box" id="box-players">
+            <div class="row">
+              <h2>Jogadores (<span id="lbl-player-count">4</span>/6)</h2>
+              <button id="btn-add-bot" class="btn btn-secondary btn-xs" type="button"><svg class="ico"><use href="#i-plus"/></svg> Bot</button>
+            </div>
+            <div id="slots-container" style="display:flex; flex-direction:column; gap:6px;"></div>
+            <div class="row sim-row">
+              <label for="chk-sim-bots">Simular só bots (você assiste; não conta no placar)</label>
+              <input type="checkbox" id="chk-sim-bots" />
+            </div>
+          </div>
+
+          <!-- Regras: predefinições + personalização (host) ou leitura (convidado) -->
+          <div class="card-box" id="box-rules-summary">
+            <div class="row">
+              <h2>Regras</h2>
+              <span id="lbl-rules-preset" class="badge preset-badge">Da casa</span>
+            </div>
+            <div id="rule-presets" class="preset-list" role="radiogroup" aria-label="Estilo de regras"></div>
+            <ul id="room-rules-list" class="rules-text"></ul>
+            <button id="btn-rules-custom" class="btn btn-secondary btn-sm" type="button" aria-expanded="false" aria-controls="box-rules"><svg class="ico"><use href="#i-sliders"/></svg> Personalizar regras</button>
+          </div>
+
+          <div class="card-box" id="box-rules" style="display:none;">
+            <h2>Personalizar regras</h2>
+            <div class="row row-select">
+              <label for="sel-decks">Número de Baralhos:</label>
+              <select id="sel-decks">
+                <option value="1">1 Baralho</option>
+                <option value="2">2 Baralhos</option>
+              </select>
+            </div>
+            <div class="row row-select">
+              <label for="sel-jokers">Quantidade de Coringas:</label>
+              <select id="sel-jokers">
+                <option value="0">0 Coringas</option>
+                <option value="1" selected>1 Coringa (Padrão)</option>
+                <option value="2">2 Coringas</option>
+                <option value="3">3 Coringas (2 baralhos)</option>
+                <option value="4">4 Coringas (2 baralhos)</option>
+              </select>
             </div>
             <div class="row">
-              <input type="text" id="inp-room-code" class="room-code-input" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="7" placeholder="Código da sala (ex: KX7RD)" style="flex:1;" />
-              <button id="btn-connect-peer" class="btn btn-success">Entrar</button>
+              <label for="chk-p2">Poder do 2 (Joga sobre tudo + Joga novamente livre):</label>
+              <input type="checkbox" id="chk-p2" checked />
             </div>
-            <div id="join-net-status" class="net-status" style="display:none;"></div>
-          </div>
-
-          <div id="host-qr-box" style="display:none; flex-direction:column; align-items:center; gap:6px; margin-top:6px;">
-            <div style="font-size:0.82rem;">Código da Sala: <strong id="lbl-room-code" style="color:var(--accent); font-size:1.25rem; letter-spacing:2px;">----</strong></div>
-            <div id="qr-container"></div>
-            <div id="lbl-invite-url" class="invite-url"></div>
-            <button id="btn-share-invite" class="btn btn-success" style="width:100%;">📤 Enviar convite (WhatsApp, etc.)</button>
-            <button id="btn-lock-room" class="btn btn-secondary" style="width:100%;" aria-pressed="false">🔓 Sala aberta — toque para trancar</button>
-            <div style="font-size:0.72rem; color:var(--text-dim); text-align:center;">Quem abrir o link ou ler o QR Code com a câmera entra direto na sala.</div>
-            <div id="host-net-status" class="net-status" style="display:none;"></div>
-          </div>
-        </div>
-
-        <!-- Jogadores na Sala -->
-        <div class="card-box" id="box-players">
-          <div class="row">
-            <h2>Sequência da Mesa (<span id="lbl-player-count">4</span>/6)</h2>
-            <button id="btn-add-bot" class="btn btn-secondary" style="padding:5px 9px; font-size:0.76rem;">+ Adicionar Bot</button>
-          </div>
-          <div id="slots-container" style="display:flex; flex-direction:column; gap:6px;"></div>
-          <div class="row sim-row">
-            <label for="chk-sim-bots">🤖 Simular só bots (você assiste; não conta no placar)</label>
-            <input type="checkbox" id="chk-sim-bots" />
-          </div>
-        </div>
-
-        <!-- Regras da Partida -->
-        <div class="card-box" id="box-rules">
-          <h2>Regras da Partida</h2>
-          <div class="row row-select">
-            <label for="sel-decks">Número de Baralhos:</label>
-            <select id="sel-decks">
-              <option value="1">1 Baralho</option>
-              <option value="2">2 Baralhos</option>
-            </select>
-          </div>
-          <div class="row row-select">
-            <label for="sel-jokers">Quantidade de Coringas:</label>
-            <select id="sel-jokers">
-              <option value="0">0 Coringas</option>
-              <option value="1" selected>1 Coringa (Padrão)</option>
-              <option value="2">2 Coringas</option>
-              <option value="3">3 Coringas (2 baralhos)</option>
-              <option value="4">4 Coringas (2 baralhos)</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="chk-p2">Poder do 2 (Joga sobre tudo + Joga novamente livre):</label>
-            <input type="checkbox" id="chk-p2" checked />
-          </div>
-          <div class="row row-select">
-            <label for="sel-draw2">Se zerar a mão com o 2 (com baralho):</label>
-            <select id="sel-draw2">
-              <option value="1" selected>Comprar 1 carta (Padrão)</option>
-              <option value="3">Comprar 3 cartas</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="chk-p7">Poder do 7 (Próximo joga menor ou igual a 7):</label>
-            <input type="checkbox" id="chk-p7" checked />
-          </div>
-          <div class="row">
-            <label for="chk-p10">Poder do 10 (Queima o monte a qualquer momento):</label>
-            <input type="checkbox" id="chk-p10" checked />
-          </div>
-          <div class="row row-select">
-            <label for="sel-after10">Após jogar o 10:</label>
-            <select id="sel-after10">
-              <option value="next" selected>Próximo jogador (Padrão)</option>
-              <option value="again">Joga novamente</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="chk-pjoker">Poder do Coringa (Passa a mão no sentido atual):</label>
-            <input type="checkbox" id="chk-pjoker" checked />
-          </div>
-          <div class="row row-select">
-            <label for="sel-multijoker">Múltiplos Coringas jogados juntos:</label>
-            <select id="sel-multijoker">
-              <option value="once" selected>Rodar mãos 1 vez (Padrão)</option>
-              <option value="per_joker">Rodar conforme quantidade</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="chk-p48">4 Iguais (1 bar.) / 8 Iguais (2 bar.) inverte ordem:</label>
-            <input type="checkbox" id="chk-p48" checked />
-          </div>
-          <div class="row row-select">
-            <label for="sel-48mode">Contagem de cartas iguais:</label>
-            <select id="sel-48mode">
-              <option value="sequence" selected>Em sequência no monte</option>
-              <option value="together">Jogadas todas juntas</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="chk-48burn">Cartas iguais também limpam o monte:</label>
-            <input type="checkbox" id="chk-48burn" />
-          </div>
-          <div class="row">
-            <label for="inp-bigpile">Monte grande (tensão e "organismo vivo") a partir de:</label>
-            <span class="bigpile-input"><input type="number" id="inp-bigpile" min="5" max="99" step="1" value="12" inputmode="numeric" /> cartas</span>
-          </div>
-          <div id="warn-no-burn" class="rules-warning" style="display:none;">
-            ⚠️ Sem o 10 e sem "cartas iguais limpam o monte", nenhuma carta sai do jogo: as partidas podem ficar muito longas.
-          </div>
-        </div>
-
-        <!-- Placar Acumulado -->
-        <div class="card-box">
-          <div class="row">
-            <h2>Placar 🏆</h2>
-            <div class="board-tabs">
-              <button class="board-tab active" data-board="session">Sessão da sala</button>
-              <button class="board-tab" data-board="general">Geral</button>
+            <div class="row row-select">
+              <label for="sel-draw2">Se zerar a mão com o 2 (com baralho):</label>
+              <select id="sel-draw2">
+                <option value="1" selected>Comprar 1 carta (Padrão)</option>
+                <option value="3">Comprar 3 cartas</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="chk-p7">Poder do 7 (Próximo joga menor ou igual a 7):</label>
+              <input type="checkbox" id="chk-p7" checked />
+            </div>
+            <div class="row">
+              <label for="chk-p10">Poder do 10 (Queima o monte a qualquer momento):</label>
+              <input type="checkbox" id="chk-p10" checked />
+            </div>
+            <div class="row row-select">
+              <label for="sel-after10">Após jogar o 10:</label>
+              <select id="sel-after10">
+                <option value="next" selected>Próximo jogador (Padrão)</option>
+                <option value="again">Joga novamente</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="chk-pjoker">Poder do Coringa (Passa a mão no sentido atual):</label>
+              <input type="checkbox" id="chk-pjoker" checked />
+            </div>
+            <div class="row row-select">
+              <label for="sel-multijoker">Múltiplos Coringas jogados juntos:</label>
+              <select id="sel-multijoker">
+                <option value="once" selected>Rodar mãos 1 vez (Padrão)</option>
+                <option value="per_joker">Rodar conforme quantidade</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="chk-p48">4 Iguais (1 bar.) / 8 Iguais (2 bar.) inverte ordem:</label>
+              <input type="checkbox" id="chk-p48" checked />
+            </div>
+            <div class="row row-select">
+              <label for="sel-48mode">Contagem de cartas iguais:</label>
+              <select id="sel-48mode">
+                <option value="sequence" selected>Em sequência no monte</option>
+                <option value="together">Jogadas todas juntas</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="chk-48burn">Cartas iguais também limpam o monte:</label>
+              <input type="checkbox" id="chk-48burn" />
+            </div>
+            <div class="row">
+              <label for="inp-bigpile">Monte grande (tensão e "organismo vivo") a partir de:</label>
+              <span class="bigpile-input"><input type="number" id="inp-bigpile" min="5" max="99" step="1" value="12" inputmode="numeric" /> cartas</span>
+            </div>
+            <div id="warn-no-burn" class="rules-warning" style="display:none;">
+              Sem o 10 e sem "cartas iguais limpam o monte", nenhuma carta sai do jogo: as partidas podem ficar muito longas.
             </div>
           </div>
-          <div id="scoreboard-list"></div>
-          <div class="row">
-            <span id="lbl-board-note" class="board-note"></span>
-            <button id="btn-reset-scores" class="btn btn-secondary" style="padding:4px 8px; font-size:0.72rem;">Zerar</button>
-          </div>
         </div>
 
-        <!-- Histórico / Log da Última Sessão do Host para Ajuste da IA -->
-        <div class="card-box" id="box-session-log" style="display:none;">
-          <h2>Log da Última Sessão (Ajuste de IA)</h2>
-          <p id="lbl-log-summary" style="font-size:0.78rem; color:var(--text-dim);"></p>
-          <div class="row" style="gap:8px;">
-            <button id="btn-download-log" class="btn btn-secondary" style="flex:1; font-size:0.78rem;">📥 Baixar Log (.json)</button>
-            <button id="btn-copy-log" class="btn btn-secondary" style="flex:1; font-size:0.78rem;">📋 Copiar Log p/ Chat</button>
+        <div class="lobby-start-row">
+          <button id="btn-start-match" class="btn btn-big" type="button"><svg class="ico"><use href="#i-play"/></svg> <span id="lbl-start-match">Começar partida</span></button>
+        </div>
+      </section>
+
+      <!-- ===== PLACAR ===== -->
+      <section id="view-board" class="lobby-view" data-view="board" aria-label="Placar">
+        <div class="scroll-panel">
+          <div class="card-box">
+            <div class="row">
+              <h2>Placar</h2>
+              <div class="board-tabs">
+                <button class="board-tab active" data-board="session">Sessão da sala</button>
+                <button class="board-tab" data-board="general">Geral</button>
+              </div>
+            </div>
+            <div id="scoreboard-list"></div>
+            <div class="row">
+              <span id="lbl-board-note" class="board-note"></span>
+              <button id="btn-reset-scores" class="btn btn-secondary btn-xs">Zerar</button>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="lobby-start-row">
-        <button id="btn-tutorial" class="btn btn-secondary">🎓 Tutorial</button>
-        <button id="btn-start-match" class="btn">Iniciar Partida</button>
-      </div>
+      <!-- ===== AJUSTES ===== -->
+      <section id="view-settings" class="lobby-view" data-view="settings" aria-label="Ajustes">
+        <div class="scroll-panel">
+          <div class="card-box" id="box-install">
+            <h2>Instalar no celular</h2>
+            <p id="lbl-install-status" class="hint-text hint-left"></p>
+            <button id="btn-install" class="btn btn-success" type="button" hidden><svg class="ico"><use href="#i-phone"/></svg> Instalar o Shithead!</button>
+            <ol id="install-ios" class="install-steps" hidden>
+              <li>Toque em <b>Compartilhar</b> <svg class="ico"><use href="#i-share"/></svg> na barra do Safari.</li>
+              <li>Escolha <b>Adicionar à Tela de Início</b>.</li>
+              <li>Toque em <b>Adicionar</b>: o jogo abre em tela cheia, como um app.</li>
+            </ol>
+            <ol id="install-other" class="install-steps" hidden>
+              <li>Abra o menu do navegador (<b>⋮</b>).</li>
+              <li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li>
+            </ol>
+          </div>
+
+          <!-- Log da última sessão (diagnóstico e ajuste da IA) -->
+          <div class="card-box" id="box-session-log" style="display:none;">
+            <h2>Ajuda e diagnóstico</h2>
+            <p id="lbl-log-summary" class="hint-text hint-left"></p>
+            <div class="row" style="gap:8px;">
+              <button id="btn-download-log" class="btn btn-secondary btn-sm" style="flex:1;"><svg class="ico"><use href="#i-download"/></svg> Baixar log</button>
+              <button id="btn-copy-log" class="btn btn-secondary btn-sm" style="flex:1;"><svg class="ico"><use href="#i-copy"/></svg> Copiar log</button>
+            </div>
+          </div>
+
+          <div class="card-box">
+            <h2>Sobre</h2>
+            <p id="lbl-about" class="hint-text hint-left">Shithead! — jogo de cartas para jogar com amigos (conexão direta entre os aparelhos) ou contra bots.</p>
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- TELA 2: MESA DE JOGO -->
@@ -242,9 +371,9 @@
         <div id="lbl-direction" class="dir-chip" title="Sentido do jogo">↻ Horário</div>
         <div id="lbl-Constraint" class="rule-chip">Monte Livre</div>
         <div class="top-actions">
-          <button id="btn-turbo" class="btn btn-secondary btn-xs" style="display:none;" title="Acelerar até o fim">⏩</button>
-          <button id="btn-board-game" class="btn btn-secondary btn-xs" title="Placar da sessão">🏆</button>
-          <button id="btn-mute-game" class="btn btn-secondary btn-xs" title="Som">🔊</button>
+          <button id="btn-turbo" class="btn btn-secondary btn-xs" style="display:none;" title="Acelerar até o fim" aria-label="Acelerar até o fim"><svg class="ico"><use href="#i-fast"/></svg></button>
+          <button id="btn-board-game" class="btn btn-secondary btn-xs" title="Placar e regras desta mesa" aria-label="Placar e regras desta mesa"><svg class="ico"><use href="#i-trophy"/></svg></button>
+          <button id="btn-mute-game" class="btn btn-secondary btn-xs" title="Som" aria-label="Som"><svg class="ico"><use href="#i-sound"/></svg></button>
           <button id="btn-leave" class="btn btn-secondary btn-xs">Sair</button>
         </div>
       </div>
@@ -345,15 +474,23 @@
 
       </div>
 
-      <!-- Placar da sessão aberto pela mesa (🏆) -->
+      <!-- Placar da sessão e regras desta mesa (botão do troféu no topo da mesa) -->
       <div id="board-overlay" class="board-overlay">
         <div class="card-box">
           <div class="row">
-            <h2>Placar da sessão 🏆</h2>
-            <button id="btn-board-close" class="btn btn-secondary btn-xs">Fechar</button>
+            <div class="board-tabs" role="tablist" aria-label="Placar e regras">
+              <button class="board-tab active" data-overlay-tab="board" type="button" role="tab" aria-selected="true">Placar</button>
+              <button class="board-tab" data-overlay-tab="rules" type="button" role="tab" aria-selected="false">Regras desta mesa</button>
+            </div>
+            <button id="btn-board-close" class="btn btn-secondary btn-xs" type="button">Fechar</button>
           </div>
-          <div id="board-overlay-list"></div>
-          <span id="lbl-board-overlay-note" class="board-note"></span>
+          <div id="overlay-pane-board" role="tabpanel">
+            <div id="board-overlay-list"></div>
+            <span id="lbl-board-overlay-note" class="board-note"></span>
+          </div>
+          <div id="overlay-pane-rules" role="tabpanel" hidden>
+            <ul id="overlay-rules-list" class="rules-text"></ul>
+          </div>
         </div>
       </div>
 

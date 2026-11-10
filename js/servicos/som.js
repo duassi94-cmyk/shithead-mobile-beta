@@ -33,8 +33,15 @@ const SoundEngine = (() => {
   function updateMuteButtons() {
     const lobbyBtn = document.getElementById('btn-mute-lobby');
     const gameBtn = document.getElementById('btn-mute-game');
-    if (lobbyBtn) lobbyBtn.textContent = muted ? '🔇 Mudo' : '🔊 Som';
-    if (gameBtn) gameBtn.textContent = muted ? '🔇' : '🔊';
+    // Ícone do sprite do index.html (alto-falante ligado/desligado)
+    const icon = `<svg class="ico"><use href="#i-${muted ? 'mute' : 'sound'}"/></svg>`;
+    [lobbyBtn, gameBtn].forEach(btn => {
+      if (!btn) return;
+      btn.innerHTML = icon;
+      btn.setAttribute('aria-label', muted ? 'Som desligado (toque para ligar)' : 'Som ligado (toque para desligar)');
+      btn.setAttribute('aria-pressed', String(muted));
+      btn.title = muted ? 'Som desligado' : 'Som ligado';
+    });
   }
 
   function createNoiseBuffer(durationSec) {

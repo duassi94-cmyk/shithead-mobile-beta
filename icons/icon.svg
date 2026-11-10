@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Mesmo desenho dos PNG (tests/make-icons.py, variante "giro"): feltro, anel de setas,
+       verso do baralho e carta de copas -->
+  <defs>
+    <radialGradient id="felt" cx="50%" cy="45%" r="65%">
+      <stop offset="0" stop-color="#1b6b5f"/>
+      <stop offset="1" stop-color="#0b1120"/>
+    </radialGradient>
+    <linearGradient id="back" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#felt)"/>
+  <!-- Anel de setas: a mesa gira, tudo pode mudar a qualquer momento -->
+  <path d="M83.1 193.1 A184 184 0 0 1 392.7 132.9" fill="none" stroke="#fcd34d" stroke-opacity="0.92" stroke-width="10" stroke-linecap="round"/>
+  <path d="M428.9 318.9 A184 184 0 0 1 119.3 379.1" fill="none" stroke="#fcd34d" stroke-opacity="0.92" stroke-width="10" stroke-linecap="round"/>
+  <polygon points="410.5,152.6 397.0,113.7 373.2,135.1" fill="#fcd34d" fill-opacity="0.92"/>
+  <polygon points="101.5,359.4 115.0,398.3 138.8,376.9" fill="#fcd34d" fill-opacity="0.92"/>
+  <g transform="rotate(-14 222 262)">
+    <rect x="134" y="140" width="192" height="268" rx="22" fill="#000" opacity="0.3" transform="translate(8 12)"/>
+    <rect x="126" y="128" width="192" height="268" rx="22" fill="#f8fafc"/>
+    <rect x="137" y="139" width="170" height="246" rx="14" fill="url(#back)"/>
+  </g>
+  <g transform="rotate(10 292 252)">
+    <rect x="204" y="130" width="192" height="268" rx="22" fill="#000" opacity="0.3" transform="translate(8 12)"/>
+    <rect x="196" y="118" width="192" height="268" rx="22" fill="#f8fafc" stroke="#cbd5e1" stroke-width="3"/>
+    <path d="M292 312c-46-30-70-56-70-86 0-20 15-36 34-36 15 0 28 9 36 22 8-13 21-22 36-22 19 0 34 16 34 36 0 30-24 56-70 86z" fill="#e11d48"/>
+  </g>
+</svg>
