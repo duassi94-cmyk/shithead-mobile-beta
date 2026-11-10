@@ -40,6 +40,35 @@
       try { navigator.vibrate(pattern); } catch (e) {}
     }
 
+    /* Caixa do próprio jogo no lugar de confirm()/prompt() do navegador, que são
+       bloqueados em navegadores dentro de apps (e no navegador embutido do Claude).
+       askDialog({ text, ok, input }) → Promise: true/false, ou o texto digitado / null. */
+    function askDialog({ text, ok = 'OK', input = null, danger = false }) {
+      const box = document.getElementById('modal-dialog');
+      const inp = document.getElementById('inp-dialog');
+      const yes = document.getElementById('btn-dialog-yes');
+      const no = document.getElementById('btn-dialog-no');
+      document.getElementById('lbl-dialog').textContent = text;
+      yes.textContent = ok;
+      yes.className = 'btn' + (danger ? ' btn-danger' : '');
+      inp.hidden = input == null;
+      inp.value = input == null ? '' : input;
+      box.hidden = false;
+      (input == null ? yes : inp).focus();
+      if (input != null) inp.select();
+      return new Promise(resolve => {
+        const done = (v) => {
+          box.hidden = true;
+          yes.onclick = no.onclick = box.onclick = inp.onkeydown = null;
+          resolve(v);
+        };
+        yes.onclick = () => done(input == null ? true : inp.value);
+        no.onclick = () => done(input == null ? false : null);
+        box.onclick = (e) => { if (e.target === box) no.onclick(); };
+        inp.onkeydown = (e) => { if (e.key === 'Enter') yes.onclick(); else if (e.key === 'Escape') no.onclick(); };
+      });
+    }
+
     function showInvalidWarning(msg, elementToShake = null) {
       SoundEngine.invalidError();
       const toast = document.getElementById('toast-warning');
@@ -3329,8 +3358,8 @@
       document.getElementById('btn-view-back').hidden = name === 'home';
       document.querySelector('#screen-lobby .brand-header').classList.toggle('has-back', name !== 'home');
       const subs = { invite: 'Convite para uma sala', board: 'Placar', settings: 'Ajustes' };
-      document.getElementById('lbl-brand-sub').textContent = name === 'home' ? `build ${AppConfig.BUILD}`
-        : (name === 'room' ? (inRoom() ? (isHost ? 'Sua sala online' : 'Sala online') : 'Mesa e regras') : subs[name]);
+      // (Início e Sala reescrevem o subtítulo com o estado da sala: "● Online")
+      setBrandSub(name === 'home' ? `build ${AppConfig.BUILD}` : (name === 'room' ? 'Mesa e regras' : subs[name]));
       if (name === 'home') renderHomeView();
       else if (name === 'room') renderRoomView();
       else if (name === 'board') renderScoreboard();
@@ -3382,22 +3411,26 @@
       const code = isHost ? roomCode : joinRoomCode;
       const banner = document.getElementById('btn-back-to-room');
       banner.hidden = !room;
+      document.getElementById('btn-home-leave-room').hidden = !room;
       if (room) {
         document.getElementById('lbl-back-to-room').textContent = isHost ? `Sua sala ${code} está aberta` : `Você está na sala ${code}`;
+        document.getElementById('lbl-home-leave-room').textContent = isHost ? 'Fechar sala' : 'Sair da sala';
       }
+      // Topo: "● Online · sala X" enquanto houver sala; senão a versão
+      if (currentView === 'home') setBrandSub(room ? `Online · sala ${code}` : `build ${AppConfig.BUILD}`, room);
       // Numa sala, os caminhos de começar outra coisa ficam escondidos (evita confusão)
-      ['btn-play-bots', 'btn-create-host', 'btn-show-join'].forEach(id => { document.getElementById(id).hidden = room; });
+      ['play-bots-row', 'btn-create-host', 'btn-show-join'].forEach(id => { document.getElementById(id).hidden = room; });
       if (room) document.getElementById('join-box').style.display = 'none';
       const bots = lobbySlots.filter(s => s.type === 'bot').length;
       const preset = presetFor(currentLobbyRules());
       document.getElementById('lbl-play-bots-sub').textContent =
-        `${bots} bot${bots === 1 ? '' : 's'} · regras ${preset ? preset.name : 'personalizadas'} · começa na hora`;
+        `${bots} bot${bots === 1 ? '' : 's'} · ${preset ? (preset.mine ? '★ ' : 'regras ') + preset.name : 'regras personalizadas'} · começa na hora`;
     }
 
     function renderRoomView() {
       const room = inRoom();
       if (currentView === 'room') {
-        document.getElementById('lbl-brand-sub').textContent = room ? (isHost ? 'Sua sala online' : 'Sala online') : 'Mesa e regras';
+        setBrandSub(room ? (isHost ? 'Sua sala online' : 'Sala online') : 'Mesa e regras', room);
       }
       const box = document.getElementById('box-online');
       box.style.display = room ? 'flex' : 'none';
@@ -3413,6 +3446,13 @@
     document.getElementById('btn-open-settings').addEventListener('click', () => showView('settings'));
     document.getElementById('btn-open-board').addEventListener('click', () => showView('board'));
     document.getElementById('btn-open-table').addEventListener('click', () => showView('room'));
+    document.getElementById('btn-bots-custom').addEventListener('click', () => {
+      showView('room');
+      const box = document.getElementById('box-rules');
+      box.style.display = 'flex';
+      document.getElementById('btn-rules-custom').setAttribute('aria-expanded', 'true');
+      document.getElementById('box-rules-summary').scrollIntoView({ block: 'start' });
+    });
     document.getElementById('btn-back-to-room').addEventListener('click', () => showView('room'));
     document.getElementById('btn-avatar-menu').addEventListener('click', () => {
       const box = document.getElementById('photo-actions');
@@ -3464,39 +3504,126 @@
       }
       showView('home', { replace: true });
     }
-    document.getElementById('btn-leave-room').addEventListener('click', () => {
-      if (isHost && joinedConns().length && !window.confirm('Fechar a sala? Os convidados serão desconectados.')) return;
+    async function confirmLeaveRoom() {
+      if (isHost && joinedConns().length &&
+        !(await askDialog({ text: 'Fechar a sala? Os convidados serão desconectados.', ok: 'Fechar sala', danger: true }))) return;
       leaveRoom();
-    });
+    }
+    document.getElementById('btn-leave-room').addEventListener('click', confirmLeaveRoom);
+    document.getElementById('btn-home-leave-room').addEventListener('click', confirmLeaveRoom);
 
-    /* ---- Regras: estilos prontos (atalhos que preenchem os mesmos campos) ----------- */
+    // Subtítulo do topo; online = bolinha verde antes do texto
+    function setBrandSub(text, online = false) {
+      const el = document.getElementById('lbl-brand-sub');
+      el.classList.toggle('is-online', !!online);
+      el.innerHTML = (online ? '<span class="online-dot" aria-hidden="true"></span>' : '') + esc(text);
+    }
+
+    /* ---- Regras: estilos prontos + até 2 regras próprias ------------------------------
+       Cada opção vale com 1 ou 2 baralhos, escolhidos no próprio cartão; com 2 baralhos
+       os Coringas dobram. As regras são guardadas "por baralho" (Coringas por baralho).
+       Tocar no cartão carrega a regra nos mesmos campos da personalização. */
     const RULE_PRESETS = [
-      { id: 'casa', name: 'Da casa', desc: '1 Coringa que gira as mãos · 10 queima e passa a vez · 4 iguais invertem',
-        rules: { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false } },
-      { id: 'classico', name: 'Clássico', desc: 'Sem Coringa · 10 queima e você joga de novo · 4 iguais invertem e queimam',
-        rules: { decks: 1, jokers: 0, p2: true, draw2: 1, p7: true, p10: true, after10: 'again', pjoker: false, multijoker: 'once', p48: true, mode48: 'sequence', burn48: true } },
-      { id: 'caotico', name: 'Caótico', desc: '2 Coringas, cada um gira as mãos · 2 com a mão vazia compra 3 · iguais juntas invertem e queimam',
-        rules: { decks: 1, jokers: 2, p2: true, draw2: 3, p7: true, p10: true, after10: 'again', pjoker: true, multijoker: 'per_joker', p48: true, mode48: 'together', burn48: true } }
+      { id: 'casa', name: 'Da casa', desc: '1 Coringa por baralho, que gira as mãos · 10 queima e passa a vez · iguais invertem',
+        rules: { jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, bigPile: null } },
+      { id: 'classico', name: 'Clássico', desc: 'Sem Coringa · 10 queima e você joga de novo · iguais invertem e queimam',
+        rules: { jokers: 0, p2: true, draw2: 1, p7: true, p10: true, after10: 'again', pjoker: false, multijoker: 'once', p48: true, mode48: 'sequence', burn48: true, bigPile: null } },
+      { id: 'caotico', name: 'Caótico', desc: '2 Coringas por baralho, cada um gira as mãos · 2 com a mão vazia compra 3 · iguais juntas invertem e queimam',
+        rules: { jokers: 2, p2: true, draw2: 3, p7: true, p10: true, after10: 'again', pjoker: true, multijoker: 'per_joker', p48: true, mode48: 'together', burn48: true, bigPile: null } }
     ];
-    let roomRules = null; // convidado: regras que o host mandou
+    const BASE_KEYS = ['p2', 'draw2', 'p7', 'p10', 'after10', 'pjoker', 'multijoker', 'p48', 'mode48', 'burn48'];
+    let roomRules = null;      // convidado: regras que o host mandou
+    let lastPickedMine = null; // regra própria carregada por último (Salvar atualiza ela)
 
     // Regras que valem na sala agora (convidado: as do host; host/local: as da tela)
     function currentLobbyRules() {
       return isHost ? getRulesFromUI() : roomRules;
     }
 
-    // Com 6 jogadores o jogo usa 2 baralhos: a predefinição continua valendo
-    function presetFor(rules) {
-      if (!rules) return null;
-      return RULE_PRESETS.find(p => Object.keys(p.rules).every(k =>
-        (k === 'decks' && lobbySlots.length >= 6) || rules[k] === p.rules[k])) || null;
+    // Regras completas → "por baralho" (o que uma opção guarda)
+    function baseOf(rules) {
+      const b = {};
+      BASE_KEYS.forEach(k => { b[k] = rules[k]; });
+      b.jokers = rules.pjoker ? rules.jokers / rules.decks : 0; // 2 baralhos e 3 Coringas = 1,5 por baralho
+      b.bigPile = rules.bigPile === defaultBigPile(rules.decks) ? null : rules.bigPile;
+      return b;
+    }
+    // Opção + nº de baralhos → regras completas
+    function rulesFromOption(p, decks) {
+      const r = p.rules;
+      return {
+        ...r, decks,
+        jokers: r.pjoker ? Math.min(decks * 2, Math.round(r.jokers * decks)) : 0,
+        bigPile: r.bigPile == null ? defaultBigPile(decks) : r.bigPile
+      };
     }
 
-    function applyPreset(id) {
-      const p = RULE_PRESETS.find(x => x.id === id);
+    /* ---- Minhas regras: 2 vagas, nome genérico ("Minha regra 1"), lápis renomeia ---- */
+    const MY_RULES_KEY = 'sh_my_rules';
+    const MY_RULES_MAX = 2;
+    function cleanBase(r) {
+      if (r && r.decks) r = baseOf(sanitizeRules(r)); // formato completo (com baralhos)
+      const s = sanitizeRules({ ...r, decks: 1 });
+      const b = {};
+      BASE_KEYS.forEach(k => { b[k] = s[k]; });
+      const j = Number(r && r.jokers);
+      b.jokers = s.pjoker && Number.isFinite(j) ? Math.min(2, Math.max(0, Math.round(j * 2) / 2)) : 0;
+      b.bigPile = r && r.bigPile != null ? sanitizeBigPile(r.bigPile, 1) : null;
+      return b;
+    }
+    function loadMyRules() {
+      try {
+        const arr = JSON.parse(Store.get(MY_RULES_KEY) || '[]');
+        return Array.isArray(arr) ? arr.filter(x => x && x.rules).slice(0, MY_RULES_MAX).map((x, i) => ({
+          id: 'mine' + i, mine: true, name: sanitizeName(x.name, `Minha regra ${i + 1}`), rules: cleanBase(x.rules)
+        })) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function saveMyRules(list) {
+      Store.set(MY_RULES_KEY, JSON.stringify(list.map(x => ({ name: x.name, rules: x.rules }))));
+    }
+
+    const jokerText = (per) => {
+      const j1 = Math.round(per), j2 = Math.round(per * 2);
+      if (!j2) return 'sem Coringa';
+      return `${j1} Coringa${j1 === 1 ? '' : 's'} (${j2} com 2 baralhos)`;
+    };
+    // Resumo curto de uma regra própria (o que muda em relação ao comum)
+    function shortRulesDesc(r) {
+      const parts = [jokerText(r.pjoker ? r.jokers : 0)];
+      if (!r.p10) parts.push('10 sem poder'); else if (r.after10 === 'again') parts.push('10 joga de novo');
+      if (!r.p2) parts.push('2 sem poder'); else if (r.draw2 === 3) parts.push('2 compra 3');
+      if (!r.p7) parts.push('7 sem poder');
+      if (r.pjoker && r.multijoker === 'per_joker') parts.push('giro por Coringa');
+      if (!r.p48) parts.push('iguais sem poder'); else parts.push(`iguais ${r.mode48 === 'together' ? 'juntas' : 'em sequência'}${r.burn48 ? ' queimam' : ''}`);
+      if (r.bigPile != null) parts.push(`monte grande ${r.bigPile}`);
+      return parts.join(' · ');
+    }
+
+    // Qual opção corresponde às regras atuais (com qualquer nº de baralhos)
+    function presetFor(rules) {
+      if (!rules) return null;
+      const b = baseOf(rules);
+      const same = (p, mine) => BASE_KEYS.every(k => b[k] === p.rules[k]) &&
+        rules.jokers === (p.rules.pjoker ? Math.min(rules.decks * 2, Math.round(p.rules.jokers * rules.decks)) : 0) &&
+        (!mine || b.bigPile === p.rules.bigPile);
+      return loadMyRules().find(p => same(p, true)) || RULE_PRESETS.find(p => same(p, false)) || null;
+    }
+    function findOption(id) {
+      return RULE_PRESETS.find(x => x.id === id) || loadMyRules().find(x => x.id === id) || null;
+    }
+    function uiDecks() {
+      return parseInt(document.getElementById('sel-decks').value, 10) === 2 ? 2 : 1;
+    }
+
+    function applyPreset(id, decks = uiDecks()) {
+      const p = findOption(id);
       if (!p || !isHost) return;
-      const r = p.rules;
-      document.getElementById('sel-decks').value = String(r.decks);
+      if (lobbySlots.length >= 6) decks = 2; // 6 jogadores: sempre 2 baralhos
+      const r = rulesFromOption(p, decks);
+      document.getElementById('sel-decks').value = String(decks);
       document.getElementById('chk-pjoker').checked = r.pjoker;
       document.getElementById('sel-jokers').value = String(r.jokers);
       document.getElementById('chk-p2').checked = r.p2;
@@ -3508,9 +3635,11 @@
       document.getElementById('chk-p48').checked = r.p48;
       document.getElementById('sel-48mode').value = r.mode48;
       document.getElementById('chk-48burn').checked = r.burn48;
-      syncBigPileInput(r.decks);
+      if (p.mine) document.getElementById('inp-bigpile').value = r.bigPile;
+      syncBigPileInput(decks);
+      lastPickedMine = p.mine ? p.id : null;
       onRulesEdited();
-      nlog('rules_preset', { preset: id });
+      nlog('rules_preset', { preset: p.mine ? 'mine' : id, decks });
     }
 
     function rulesListHtml(rules) {
@@ -3520,21 +3649,99 @@
     function renderRulesSummary() {
       const rules = currentLobbyRules();
       const preset = presetFor(rules);
-      document.getElementById('lbl-rules-preset').textContent = rules ? (preset ? preset.name : 'Personalizado') : '...';
+      document.getElementById('lbl-rules-preset').textContent = rules
+        ? (preset ? `${preset.mine ? '★ ' : ''}${preset.name} · ${rules.decks} baralho${rules.decks > 1 ? 's' : ''}` : 'Personalizado')
+        : '...';
       document.getElementById('room-rules-list').innerHTML = rules
         ? rulesListHtml(rules)
         : '<li>Aguardando as regras do host...</li>';
       const list = document.getElementById('rule-presets');
       if (!list.hidden) {
-        list.innerHTML = RULE_PRESETS.map(p => `
-          <button type="button" class="preset-btn" role="radio" data-preset="${p.id}" aria-checked="${preset && preset.id === p.id ? 'true' : 'false'}">
-            <b>${esc(p.name)}</b><small>${esc(p.desc)}</small>
-          </button>`).join('');
+        const decksNow = rules ? rules.decks : uiDecks();
+        const six = lobbySlots.length >= 6;
+        const card = (p, desc) => {
+          const on = !!(preset && preset.id === p.id);
+          const seg = [1, 2].map(d => `<button type="button" data-pick="${p.id}" data-decks="${d}" aria-pressed="${on && decksNow === d}"` +
+            `${d === 1 && six ? ' disabled title="Com 6 jogadores são 2 baralhos"' : ''}>${d} baralho${d > 1 ? 's' : ''}</button>`).join('');
+          const tools = p.mine
+            ? `<button type="button" class="preset-icon" data-rename="${p.id}" aria-label="Renomear ${esc(p.name)}" title="Renomear"><svg class="ico"><use href="#i-pencil"/></svg></button>` +
+              `<button type="button" class="preset-icon" data-del-rules="${p.id}" aria-label="Apagar ${esc(p.name)}" title="Apagar">×</button>`
+            : '';
+          return `<div class="preset-card${p.mine ? ' preset-mine' : ''}${on ? ' is-on' : ''}">
+            <button type="button" class="preset-main" data-pick="${p.id}" role="radio" aria-checked="${on}">
+              <b>${esc(p.name)}</b><small>${esc(desc)}</small>
+            </button>
+            <div class="preset-foot"><div class="deck-seg" role="group" aria-label="Baralhos">${seg}</div>${tools}</div>
+          </div>`;
+        };
+        list.innerHTML = RULE_PRESETS.map(p => card(p, p.desc)).join('') +
+          loadMyRules().map(p => card(p, shortRulesDesc(p.rules))).join('');
       }
+      document.getElementById('btn-rules-save').hidden = !isHost;
     }
-    document.getElementById('rule-presets').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-preset]');
-      if (b) { SoundEngine.select(); applyPreset(b.dataset.preset); }
+
+    // Salvar: atualiza a regra própria carregada por último; senão cria "Minha regra N"
+    document.getElementById('btn-rules-save').addEventListener('click', async () => {
+      if (!isHost) return;
+      const rules = getRulesFromUI();
+      const match = presetFor(rules);
+      if (match && match.mine) { showInvalidWarning(`Estas regras já estão salvas em "${match.name}".`); return; }
+      const base = baseOf(rules);
+      const list = loadMyRules();
+      const picked = lastPickedMine && list.find(x => x.id === lastPickedMine);
+      if (picked) {
+        if (!(await askDialog({ text: `Atualizar "${picked.name}" com as regras atuais?`, ok: 'Atualizar' }))) return;
+        picked.rules = base;
+      } else if (list.length < MY_RULES_MAX) {
+        const used = new Set(list.map(x => x.name));
+        let n = 1;
+        while (used.has(`Minha regra ${n}`)) n++;
+        list.push({ id: 'mine' + list.length, mine: true, name: `Minha regra ${n}`, rules: base });
+        lastPickedMine = 'mine' + (list.length - 1);
+      } else {
+        showInvalidWarning('Já há 2 regras próprias: carregue uma para alterar, ou apague uma (×).');
+        return;
+      }
+      saveMyRules(list);
+      nlog('rules_saved', { count: list.length });
+      SoundEngine.select();
+      renderRulesSummary();
+      renderHomeView();
+    });
+
+    document.getElementById('rule-presets').addEventListener('click', async (e) => {
+      const rn = e.target.closest('[data-rename]');
+      if (rn) {
+        const list = loadMyRules();
+        const p = list.find(x => x.id === rn.dataset.rename);
+        if (!p) return;
+        const raw = await askDialog({ text: 'Nome desta regra:', ok: 'Salvar nome', input: p.name });
+        if (raw == null) return;
+        const name = sanitizeName(raw, '');
+        if (!name) { showInvalidWarning('O nome não pode ficar vazio.'); return; }
+        p.name = name;
+        saveMyRules(list);
+        renderRulesSummary();
+        renderHomeView();
+        return;
+      }
+      const del = e.target.closest('[data-del-rules]');
+      if (del) {
+        const list = loadMyRules();
+        const p = list.find(x => x.id === del.dataset.delRules);
+        if (p && await askDialog({ text: `Apagar a regra "${p.name}"? (As regras da mesa não mudam.)`, ok: 'Apagar', danger: true })) {
+          saveMyRules(list.filter(x => x !== p));
+          lastPickedMine = null;
+          renderRulesSummary();
+          renderHomeView();
+        }
+        return;
+      }
+      const b = e.target.closest('[data-pick]');
+      if (b && !b.disabled) {
+        SoundEngine.select();
+        applyPreset(b.dataset.pick, b.dataset.decks ? Number(b.dataset.decks) : uiDecks());
+      }
     });
     document.getElementById('btn-rules-custom').addEventListener('click', () => {
       const box = document.getElementById('box-rules');
@@ -3790,14 +3997,14 @@
       renderScoreboard();
     }));
 
-    document.getElementById('btn-reset-scores').addEventListener('click', () => {
+    document.getElementById('btn-reset-scores').addEventListener('click', async () => {
       SoundEngine.select();
       if (boardTab === 'session') {
         if (!isHost) return;
         sessionRecords = [];
         joinedConns().forEach(c => netSend(c, { type: 'SESSION', session: sessionRecords }));
       } else {
-        if (!window.confirm('Apagar todo o histórico de partidas guardado neste aparelho?')) return;
+        if (!(await askDialog({ text: 'Apagar todo o histórico de partidas guardado neste aparelho?', ok: 'Apagar', danger: true }))) return;
         Store.remove(HISTORY_KEY);
       }
       renderScoreboard();

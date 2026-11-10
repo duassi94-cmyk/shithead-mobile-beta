@@ -48,6 +48,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M14 6l4 4"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
     <symbol id="i-fast" viewBox="0 0 24 24"><path d="M3 5.5v13l8.5-6.5zM12 5.5v13l8.5-6.5z" fill="currentColor"/></symbol>
@@ -70,6 +71,19 @@
     </div>
   </div>
   <div id="toast-warning">Jogada inválida!</div>
+
+  <!-- Caixa de confirmação / nome do próprio jogo (navegadores dentro de apps bloqueiam
+       as janelas confirm/prompt do navegador) -->
+  <div id="modal-dialog" class="dialog-overlay" hidden>
+    <div class="card-box dialog-box" role="dialog" aria-modal="true" aria-labelledby="lbl-dialog">
+      <p id="lbl-dialog" class="dialog-text"></p>
+      <input type="text" id="inp-dialog" maxlength="24" autocomplete="off" hidden />
+      <div class="dialog-actions">
+        <button id="btn-dialog-no" class="btn btn-secondary" type="button">Cancelar</button>
+        <button id="btn-dialog-yes" class="btn" type="button">OK</button>
+      </div>
+    </div>
+  </div>
 
   <div class="app-shell">
     <!-- TELA 1: ENTRADA (Início, Convite, Sala, Ajustes, Placar)
@@ -133,12 +147,19 @@
             <span><b id="lbl-back-to-room">Você está numa sala</b><small>Toque para voltar à sala</small></span>
             <svg class="ico"><use href="#i-forward"/></svg>
           </button>
+          <button id="btn-home-leave-room" class="btn btn-secondary leave-room-btn" type="button" hidden><svg class="ico"><use href="#i-exit"/></svg> <span id="lbl-home-leave-room">Fechar sala</span></button>
 
           <div id="home-actions" class="home-actions">
-            <button id="btn-play-bots" class="hero-btn hero-primary" type="button">
-              <svg class="ico hero-ico"><use href="#i-play"/></svg>
-              <span><b>Jogar contra bots</b><small id="lbl-play-bots-sub">Começa na hora</small></span>
-            </button>
+            <!-- Toque grande: começa na hora. Ícone ao lado: ajustar bots e regras antes -->
+            <div id="play-bots-row" class="hero-split">
+              <button id="btn-play-bots" class="hero-btn hero-primary" type="button">
+                <svg class="ico hero-ico"><use href="#i-play"/></svg>
+                <span><b>Jogar contra bots</b><small id="lbl-play-bots-sub">Começa na hora</small></span>
+              </button>
+              <button id="btn-bots-custom" class="hero-side" type="button" aria-label="Ajustar bots e regras antes de jogar" title="Ajustar bots e regras">
+                <svg class="ico"><use href="#i-sliders"/></svg>
+              </button>
+            </div>
             <button id="btn-create-host" class="hero-btn" type="button">
               <svg class="ico hero-ico"><use href="#i-users"/></svg>
               <span><b>Criar sala</b><small>Chame amigos pelo link ou QR Code</small></span>
@@ -220,7 +241,10 @@
             </div>
             <div id="rule-presets" class="preset-list" role="radiogroup" aria-label="Estilo de regras"></div>
             <ul id="room-rules-list" class="rules-text"></ul>
-            <button id="btn-rules-custom" class="btn btn-secondary btn-sm" type="button" aria-expanded="false" aria-controls="box-rules"><svg class="ico"><use href="#i-sliders"/></svg> Personalizar regras</button>
+            <div id="rules-actions" class="rules-actions">
+              <button id="btn-rules-custom" class="btn btn-secondary btn-sm" type="button" aria-expanded="false" aria-controls="box-rules"><svg class="ico"><use href="#i-sliders"/></svg> Personalizar</button>
+              <button id="btn-rules-save" class="btn btn-secondary btn-sm" type="button"><svg class="ico"><use href="#i-download"/></svg> Salvar estas regras</button>
+            </div>
           </div>
 
           <div class="card-box" id="box-rules" style="display:none;">

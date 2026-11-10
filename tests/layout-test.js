@@ -127,7 +127,7 @@
         const r = R(e);
         if (r.left < -0.5 || r.right > vw + 0.5) probs.push((e.id || e.tagName.toLowerCase()) + ' fora da tela');
       });
-      view.querySelectorAll('.hero-btn, .link-btn, .preset-btn, .btn-big, .room-banner').forEach(e => {
+      view.querySelectorAll('.hero-btn, .link-btn, .preset-main, .preset-icon, .btn-big, .room-banner').forEach(e => {
         if (e.offsetWidth && e.offsetHeight < 44) probs.push((e.id || e.className.split(' ')[0]) + ' com ' + e.offsetHeight + 'px de altura');
         if (e.offsetWidth && e.scrollWidth > e.clientWidth + 1) probs.push((e.id || e.className.split(' ')[0]) + ' texto não cabe');
       });
