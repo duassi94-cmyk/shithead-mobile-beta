@@ -34,9 +34,9 @@ function addHistory(S, events, before) {
       const cards = (e.cardsPlayed || []).slice(0, 8);
       const fromTable = player ? before.open - player.open.length : 0;
       const src = e.action === 'BLIND_SUCCESS' ? 'blind' : (fromTable <= 0 ? 'hand' : (fromTable >= cards.length ? 'table' : 'mixed'));
-      add({ k: 'play', p: before.pid, cards, src, fx });
+      add({ k: 'play', p: before.pid, cards, src, fx, ...(before.timer ? { tm: 1 } : {}) });
     } else if (e.action === 'PICKUP_PILE' || e.action === 'PICKUP_NO_MOVE_WITH_JOKER') {
-      add({ k: 'pickup', p: before.pid, n: e.discardCountBefore || 0 });
+      add({ k: 'pickup', p: before.pid, n: e.discardCountBefore || 0, ...(before.timer ? { tm: 1 } : {}) });
     } else if (e.action === 'BLIND_FAIL_PICKUP') {
       add({ k: 'blindFail', p: before.pid, cards: [e.cardFlipped], n: e.discardCountCollected || 0 });
     }
@@ -58,6 +58,10 @@ const FX_TEXT = { burn: 'queimou o monte', reverse: 'inverteu o sentido', seven:
 
 // Texto simples de uma entrada (quem mostra na tela escapa o HTML). nameOf(id) → nome.
 function historyText(e, nameOf) {
+  const t = historyTextBase(e, nameOf);
+  return e.tm && t ? `${t} (tempo esgotado)` : t;
+}
+function historyTextBase(e, nameOf) {
   const who = nameOf(e.p) || 'Alguém';
   switch (e.k) {
     case 'play': {

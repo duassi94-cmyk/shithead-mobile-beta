@@ -326,6 +326,23 @@
               <label for="inp-bigpile">Monte grande (tensão e "organismo vivo") a partir de:</label>
               <span class="bigpile-input"><input type="number" id="inp-bigpile" min="5" max="99" step="1" value="12" inputmode="numeric" /> cartas</span>
             </div>
+            <div class="row row-select">
+              <label for="sel-timer">Cronômetro por jogada (vale também na troca):</label>
+              <select id="sel-timer">
+                <option value="0" selected>Sem cronômetro</option>
+                <option value="15">15 segundos</option>
+                <option value="30">30 segundos</option>
+                <option value="60">60 segundos</option>
+              </select>
+            </div>
+            <div class="row row-select">
+              <label for="sel-timeout">Quando o tempo acaba:</label>
+              <select id="sel-timeout">
+                <option value="bot" selected>O bot joga pela pessoa</option>
+                <option value="pickup">A pessoa recolhe o monte</option>
+                <option value="warn">Só um aviso</option>
+              </select>
+            </div>
             <div id="warn-no-burn" class="rules-warning start-hidden">
               Sem o 10 e sem "cartas iguais limpam o monte", nenhuma carta sai do jogo: as partidas podem ficar muito longas.
             </div>
@@ -427,6 +444,7 @@
     <div id="screen-game" class="screen">
       <div class="top-bar">
         <div id="lbl-direction" class="dir-chip" title="Sentido do jogo">↻ Horário</div>
+        <div id="lbl-clock" class="clock-chip" role="timer" hidden></div>
         <div id="lbl-Constraint" class="rule-chip">Monte Livre</div>
         <div class="top-actions">
           <button id="btn-game-menu" class="top-btn top-menu-btn" type="button" aria-label="Mais opções" aria-expanded="false" aria-controls="game-menu" title="Mais opções"><span aria-hidden="true">⋯</span></button>

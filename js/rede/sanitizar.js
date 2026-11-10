@@ -100,6 +100,7 @@ function sanitizeHistory(arr, ids) {
     }
     if (e.k === 'pickup' || e.k === 'blindFail') out.n = int(e.n, 250);
     if (e.k === 'out') out.n = int(e.n, 6);
+    if ((e.k === 'play' || e.k === 'pickup') && e.tm) out.tm = 1; // jogada feita pelo cronômetro
     return out;
   }).filter(Boolean);
 }
@@ -171,6 +172,7 @@ function sanitizeState(st) {
     lastPickupCount: Math.min(250, Math.max(0, num(st.lastPickupCount))),
     turbo: !!st.turbo,
     history: sanitizeHistory(st.history, ids),
+    turnMsLeft: Math.min(61000, Math.max(0, num(st.turnMsLeft))),
     stall: null
   };
 }
@@ -191,7 +193,10 @@ function sanitizeRules(r) {
     p48: b(r.p48, true),
     mode48: r.mode48 === 'together' ? 'together' : 'sequence',
     burn48: b(r.burn48, false),
-    bigPile: sanitizeBigPile(r.bigPile, r.decks === 2 ? 2 : 1)
+    bigPile: sanitizeBigPile(r.bigPile, r.decks === 2 ? 2 : 1),
+    // Cronômetro (segundos por jogada; 0 = sem) e o que acontece quando acaba
+    timer: [15, 30, 60].includes(Number(r.timer)) ? Number(r.timer) : 0,
+    timeout: ['pickup', 'warn'].includes(r.timeout) ? r.timeout : 'bot'
   };
 }
 

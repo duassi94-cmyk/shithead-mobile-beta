@@ -500,6 +500,9 @@
           document.getElementById('sel-48mode').value = r.mode48 || 'sequence';
           document.getElementById('chk-48burn').checked = r.burn48 ?? false;
           document.getElementById('inp-bigpile').value = sanitizeBigPile(r.bigPile, r.decks === 2 ? 2 : 1);
+          const t = sanitizeRules(r);
+          document.getElementById('sel-timer').value = String(t.timer);
+          document.getElementById('sel-timeout').value = t.timeout;
         } catch (e) {}
       }
       lastDecksForBigPile = parseInt(document.getElementById('sel-decks').value, 10) === 2 ? 2 : 1;
@@ -554,8 +557,12 @@
         p48: document.getElementById('chk-p48').checked,
         mode48: document.getElementById('sel-48mode').value,
         burn48: document.getElementById('chk-48burn').checked,
-        bigPile: syncBigPileInput(decks)
+        bigPile: syncBigPileInput(decks),
+        // Cronômetro: configuração da mesa (fica fora das predefinições e das regras próprias)
+        timer: parseInt(document.getElementById('sel-timer').value, 10) || 0,
+        timeout: document.getElementById('sel-timeout').value
       };
+      document.getElementById('sel-timeout').disabled = !rules.timer;
       Store.set('sh_rules', JSON.stringify(rules));
       return rules;
     }
@@ -1009,6 +1016,8 @@
       return {
         ...G,
         stall: undefined,
+        turnEndsAt: undefined,
+        turnMsLeft: G.turnEndsAt ? Math.max(0, G.turnEndsAt - Date.now()) : 0,
         deck: hiddenRun(G.deck.length, 'd'),
         sessionLosses: sessionLossesForTable(),
         loserAvatar: null,
@@ -1841,6 +1850,8 @@
         if (!state) { NetLog.count('state_rejected'); return; }
         restoreAvatars(state);
         G = state;
+        // Cronômetro: o host manda quanto falta; aqui conta no relógio deste aparelho
+        guestClockEndsAt = state.turnMsLeft ? Date.now() + state.turnMsLeft : 0;
         lastHostPingAt = Date.now();
         document.getElementById('screen-lobby').classList.remove('active');
         document.getElementById('screen-game').classList.add('active');
@@ -1900,7 +1911,98 @@
       clientConns.forEach(c => { if (!c.__playerId) return; try { netSend(c, { type: 'LOBBY_SYNC', slots: lobbySlots, rules }); } catch (e) {} });
     }
 
+    /* ---- Cronômetro da jogada (regras: timer em segundos, timeout = o que acontece) ----
+       Só o host mede o tempo (G.turnEndsAt, no relógio dele). Os convidados recebem quanto
+       falta (turnMsLeft) a cada atualização da mesa e contam no próprio relógio.
+       Vale para jogadores humanos na partida normal (não na simulação nem no tutorial):
+       na troca de cartas (quem ainda não tocou em Pronto) e em cada vez de jogar. */
+    let turnTimer = null;
+    let turnClockKey = '';
+    let guestClockEndsAt = 0; // convidado: fim do tempo no relógio deste aparelho
+    function timerSecs() {
+      return G && G.mode === 'normal' && G.rules && [15, 30, 60].includes(G.rules.timer) ? G.rules.timer : 0;
+    }
+    function syncTurnClock() {
+      if (!isHost || !G) return;
+      const secs = timerSecs();
+      let key = '';
+      if (secs && G.phase === 'SWAP' && G.players.some(p => p.type === 'human' && !p.readySwap)) key = 'SWAP|' + matchStartedAt;
+      else if (secs && G.phase === 'PLAY') {
+        const p = G.players[G.turnIdx];
+        if (p && p.type === 'human' && !p.escaped) key = `PLAY|${G.turnCounter || 0}|${G.turnIdx}`;
+      }
+      if (key === turnClockKey) return;
+      turnClockKey = key;
+      clearTimeout(turnTimer);
+      turnTimer = null;
+      if (!key) delete G.turnEndsAt;
+      else {
+        G.turnEndsAt = Date.now() + secs * 1000;
+        turnTimer = setTimeout(onTurnTimeout, secs * 1000 + 60);
+      }
+      renderClock(); // a contagem na tela acompanha na hora (sem esperar o próximo desenho)
+    }
+    function stopTurnClock() {
+      clearTimeout(turnTimer);
+      turnTimer = null;
+      turnClockKey = '';
+      if (G) delete G.turnEndsAt;
+      renderClock();
+    }
+    // Fim do tempo: o bot joga pela pessoa (padrão), ela recolhe o monte, ou só um aviso
+    function onTurnTimeout() {
+      turnTimer = null;
+      if (!isHost || !G || !timerSecs()) return;
+      const how = G.rules.timeout || 'bot';
+      if (how === 'warn') return; // cada aparelho mostra "Tempo!" e toca o alarme sozinho
+      if (G.phase === 'SWAP') {
+        G.players.filter(p => p.type === 'human' && !p.readySwap)
+          .forEach(p => { if (G.phase === 'SWAP') executePlayerAction(p.id, { type: 'READY_SWAP', byTimer: true }); });
+        return;
+      }
+      if (G.phase !== 'PLAY') return;
+      const p = G.players[G.turnIdx];
+      if (!p || p.type !== 'human' || turnClockKey !== `PLAY|${G.turnCounter || 0}|${G.turnIdx}`) return;
+      let action = null;
+      if (how === 'pickup' && G.discard.length > 0 && RulesEngine.canPlayerPickupPile(G, p).allowed) action = { type: 'PICKUP_PILE' };
+      if (!action) action = AIEngine.decideTurnAction(G, G.turnIdx);
+      if (action) executePlayerAction(p.id, { ...action, byTimer: true });
+    }
+    // Contagem na mesa (todos os aparelhos). Só roda um relógio de 250 ms enquanto há tempo correndo.
+    let clockInterval = null;
+    let clockAlerted = '';
+    function renderClock() {
+      const el = document.getElementById('lbl-clock');
+      const end = G && (G.phase === 'PLAY' || G.phase === 'SWAP') ? clockEndsAt() : 0;
+      el.hidden = !end;
+      if (!end) {
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+        return;
+      }
+      if (!clockInterval) clockInterval = setInterval(renderClock, 250);
+      const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      const me = G.players.find(p => p.id === myPlayerId);
+      const mine = !!me && me.type === 'human' &&
+        ((G.phase === 'PLAY' && G.players[G.turnIdx] === me) || (G.phase === 'SWAP' && !me.readySwap));
+      const txt = left > 0 ? String(left) : 'Tempo!'; // o ícone ⏱ vem do CSS (some em tela estreita)
+      if (el.textContent !== txt) el.textContent = txt;
+      el.classList.toggle('clock-mine', mine);
+      el.classList.toggle('clock-low', left <= 5);
+      el.setAttribute('aria-label', left > 0 ? `Tempo da vez: ${left} segundos` : 'Tempo esgotado');
+      // Avisos só para quem está com o tempo correndo: 5 s (vibra e fala) e fim (alarme)
+      const key = `${G.phase}|${G.turnCounter || 0}|${end}`;
+      if (mine && left > 0 && left <= 5 && clockAlerted !== key + '|5') { clockAlerted = key + '|5'; safeVibrate(40); announce('Faltam 5 segundos'); }
+      if (mine && left === 0 && clockAlerted !== key + '|0') { clockAlerted = key + '|0'; safeVibrate([80, 60, 80]); SoundEngine.alarm(); announce('Tempo esgotado'); }
+    }
+
+    // Fim do tempo em qualquer aparelho (0 = sem cronômetro agora)
+    function clockEndsAt() {
+      if (!G || !timerSecs()) return 0;
+      return isHost ? (G.turnEndsAt || 0) : guestClockEndsAt;
+    }
+
     function broadcastState(fx = null) {
+      syncTurnClock(); // antes de salvar e transmitir: a mesa já leva o tempo da vez nova
       saveHostResume(); // entrada, saída, bot assumindo: tudo que muda a mesa passa por aqui
       if (!isHost || clientConns.length === 0) return;
       // Uma versão nova por transmissão (antes subia uma vez por convidado)
@@ -2292,8 +2394,10 @@
       }
       // Histórico público: anotado antes dos eventos (que já transmitem a mesa)
       const before = PlayHistory.before(G, playerId);
+      if (action.byTimer) before.timer = true;
       const res = Core.apply(G, playerId, action);
       if (res.ok) PlayHistory.add(G, res.events, before);
+      if (res.ok && action.byTimer && action.type !== 'READY_SWAP') G.bannerText = `⏰ Tempo esgotado! ${G.bannerText}`;
       runCoreEvents(res.events, action.fromRect || null);
     }
 
@@ -3033,6 +3137,7 @@
       renderBurnedPile();
       renderDiscardPileMessy();
       refreshHistoryIfOpen();
+      renderClock();
 
       // Botão ⏩: aparece quando você já escapou (ou na simulação)
       const turboBtn = document.getElementById('btn-turbo');
@@ -4274,6 +4379,7 @@
 
     function returnToLobbyScreen() {
       clearTimeout(aiTimeout);
+      stopTurnClock();
       turboMode = false;
       coachOpen = false;
       document.getElementById('coach-bubble').classList.remove('show');

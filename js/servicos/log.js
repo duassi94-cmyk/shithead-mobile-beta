@@ -36,7 +36,8 @@ const LoggerModule = (() => {
       r.p10 ? `10: queima o monte e ${r.after10 === 'again' ? 'joga de novo' : 'passa a vez'}` : '10: sem poder',
       r.pjoker ? `Coringa: gira as mãos ${r.multijoker === 'per_joker' ? '1 vez por coringa' : '1 vez'}` : 'Coringa: fora do baralho',
       r.p48 ? `${r.decks === 1 ? 4 : 8} iguais (${r.mode48 === 'together' ? 'juntas' : 'em sequência'}): invertem${r.burn48 ? ' e queimam o monte' : ''}` : 'Iguais: sem poder',
-      `Monte grande a partir de ${r.bigPile || (r.decks === 2 ? 20 : 12)} cartas`
+      `Monte grande a partir de ${r.bigPile || (r.decks === 2 ? 20 : 12)} cartas`,
+      r.timer ? `Cronômetro: ${r.timer} s por jogada e na troca; ao acabar, ${{ pickup: 'a pessoa recolhe o monte', warn: 'só um aviso' }[r.timeout] || 'o bot joga pela pessoa'}` : 'Sem cronômetro'
     ];
   }
 
