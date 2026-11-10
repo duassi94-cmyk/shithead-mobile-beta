@@ -10,9 +10,15 @@ Licença MIT — Copyright (c) 2015 Michelle Bu and Eric Zhang, http://peerjs.co
 Origem: https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js
 Licença MIT — Copyright (c) 2012 davidshimjs
 
+## Preact 10 + htm 3.1.1 — `preact-htm.module.js`
+Origem: https://cdn.jsdelivr.net/npm/htm@3.1.1/preact/standalone.module.js (pacote único:
+Preact, hooks e htm; sem imports externos). SHA-256 72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7
+Preact: Licença MIT — Copyright (c) 2015-present Jason Miller.
+htm: Apache License 2.0 — Copyright 2018 Google Inc. Texto completo em `LICENSE-htm-apache-2.0.txt`.
+
 ---
 
-Texto da licença MIT (vale para as duas):
+Texto da licença MIT (vale para PeerJS, QRCode.js e Preact):
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this
 software and associated documentation files (the "Software"), to deal in the Software

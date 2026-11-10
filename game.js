@@ -2425,7 +2425,16 @@
     const LONG_PRESS_MS = 2000;
     let lastTapInfo = { id: null, t: 0 };
 
-    function attachCardInteraction(domEl, card, sourceType, me, isMyTurn) {
+    // Liga os eventos de toque uma vez por elemento (os componentes reaproveitam o elemento
+    // entre desenhos). Os dados atuais (carta, origem, você, sua vez) ficam em domEl.__ci,
+    // atualizados a cada desenho, e são lidos no início de cada toque.
+    function bindCard(domEl, ci) {
+      domEl.__ci = ci;
+      if (!domEl.__ciBound) { domEl.__ciBound = true; attachCardInteraction(domEl); }
+    }
+
+    function attachCardInteraction(domEl) {
+      let card = null, sourceType = null, me = null, isMyTurn = false;
       let startX = 0;
       let startY = 0;
       let isDragging = false;
@@ -2438,6 +2447,9 @@
 
       domEl.addEventListener('pointerdown', (e) => {
         if (e.button !== undefined && e.button !== 0) return;
+        const ci = domEl.__ci;
+        if (!ci || ci.off) return; // assistindo: as cartas não respondem
+        ({ card, sourceType, me, isMyTurn } = ci);
         SoundEngine.init();
         startX = e.clientX;
         startY = e.clientY;
@@ -2730,38 +2742,27 @@
     }
 
     function renderTurnSequenceBar(meIdx) {
-      const seqBar = document.getElementById('turn-sequence-bar');
-      seqBar.innerHTML = '';
       if (!G) return;
-
       const nextIdx = G.phase === 'PLAY' ? RulesEngine.getNextActivePlayerIndex(G, G.turnIdx) : -1;
       const n = G.players.length;
       // Mostra na ordem real de jogada, começando por quem está jogando
       const startIdx = G.phase === 'PLAY' ? G.turnIdx : 0;
-      const order = [];
-      for (let k = 0; k < n; k++) order.push(((startIdx + k * G.direction) % n + n) % n);
-
-      order.forEach((idx, k) => {
+      const nodes = [];
+      for (let k = 0; k < n; k++) {
+        const idx = ((startIdx + k * G.direction) % n + n) % n;
         const p = G.players[idx];
-        const node = document.createElement('div');
-        const isCurrent = G.phase === 'PLAY' && idx === G.turnIdx;
-        const isNext = G.phase === 'PLAY' && idx === nextIdx && idx !== G.turnIdx;
-        // Só quem está jogando mostra o nome; os demais aparecem pelo avatar (cabe em qualquer celular)
-        const compact = G.phase === 'PLAY' ? !isCurrent : n > 3;
-        node.className = 'seq-node' + (isCurrent ? ' seq-active' : '') + (isNext ? ' seq-next' : '') + (p.escaped ? ' seq-escaped' : '') + (compact ? ' seq-compact' : '');
-        node.title = p.name + (isCurrent ? ' — vez' : (isNext ? ' — próximo' : ''));
-        const avatarSrc = p.avatar || AvatarModule.getDefaultAvatar(p.type, p.persona);
-        const tag = isCurrent ? '<span class="seq-tag"> · VEZ</span>' : '';
-        node.innerHTML = `<img src="${esc(avatarSrc)}" alt="" /><span>${idx === meIdx && G.mode !== 'sim' ? 'Você' : esc(p.name.split(' ')[0])}${tag}</span>`;
-        seqBar.appendChild(node);
-        if (k < n - 1) {
-          const arrow = document.createElement('span');
-          arrow.className = 'seq-arrow';
-          arrow.setAttribute('aria-hidden', 'true');
-          arrow.textContent = '›';
-          seqBar.appendChild(arrow);
-        }
-      });
+        const current = G.phase === 'PLAY' && idx === G.turnIdx;
+        const next = G.phase === 'PLAY' && idx === nextIdx && idx !== G.turnIdx;
+        nodes.push({
+          id: p.id, current, next, escaped: !!p.escaped,
+          // Só quem está jogando mostra o nome; os demais aparecem pelo avatar (cabe em qualquer celular)
+          compact: G.phase === 'PLAY' ? !current : n > 3,
+          title: p.name + (current ? ' — vez' : (next ? ' — próximo' : '')),
+          avatar: p.avatar || AvatarModule.getDefaultAvatar(p.type, p.persona),
+          label: idx === meIdx && G.mode !== 'sim' ? 'Você' : p.name.split(' ')[0]
+        });
+      }
+      Mesa.seqBar(document.getElementById('turn-sequence-bar'), nodes);
     }
 
     // Posições dos adversários num arco elíptico (o jogador local fica na base)
@@ -2783,7 +2784,6 @@
 
     function renderSeats(myIdx, nextIdx) {
       const oppArea = document.getElementById('opponents-area');
-      oppArea.innerHTML = '';
       const total = G.players.length;
       // Mesa apertada (celular pequeno ou muitos jogadores): assentos compactos
       const opp = total - 1;
@@ -2795,41 +2795,30 @@
       oppArea.style.setProperty('--seat-w', compact ? `${seatW}px` : '');
       oppArea.classList.toggle('seats-tight', compact && seatW < 58); // muitos jogadores em tela estreita
       const positions = seatPositions(opp, compact);
+      const seats = [];
       for (let offset = 1; offset < total; offset++) {
         // Sentido horário na tela: a partir de você (base) → esquerda → topo → direita
         const idx = (myIdx + offset) % total;
         const p = G.players[idx];
         const pos = positions[offset - 1];
-        const isTurn = G.turnIdx === idx && G.phase === 'PLAY';
-        const isNext = nextIdx === idx && G.phase === 'PLAY' && idx !== G.turnIdx;
-
-        const seat = document.createElement('div');
-        seat.className = 'seat' + (isTurn ? ' turn-active' : '') + (isNext ? ' next-active' : '') + (p.escaped ? ' safe-out' : '');
-        seat.dataset.seatId = p.id;
-        seat.style.left = `${pos.left}%`;
-        seat.style.top = `${pos.top}%`;
-
-        const miniTable = [0, 1, 2].map(i => {
-          const o = p.open[i];
-          const c = p.closed[i];
-          if (o) return `<div class="mini-slot open-card ${o.isRed ? 'red' : ''}">${o.isJoker ? '★' : o.label}</div>`;
-          if (c) return `<div class="mini-slot"></div>`;
-          return `<div class="mini-slot empty"></div>`;
-        }).join('');
-
-        const status = p.escaped ? '✔ Salvo!' : (isTurn ? 'jogando…' : (isNext ? 'próximo' : ''));
-        const avatarSrc = p.avatar || AvatarModule.getDefaultAvatar(p.type, p.persona);
-        seat.innerHTML = `
-          <div class="seat-avatar-wrap">
-            <img class="seat-avatar" src="${esc(avatarSrc)}" alt="" />
-            <span class="skull-badge">${scoreFor(p)}</span>
-            <span class="seat-hand-pill" title="Cartas na mão">${p.hand.length}</span>
-          </div>
-          <div class="seat-name" title="${esc(p.name)}">${esc(p.type === 'bot' ? p.name.replace(/\s*\((Fácil|Médio|Difícil)\)\s*$/, '') : p.name)}</div>
-          <div class="opp-mini-table">${miniTable}</div>
-          <div class="seat-status">${status}</div>`;
-        oppArea.appendChild(seat);
+        const turn = G.turnIdx === idx && G.phase === 'PLAY';
+        const next = nextIdx === idx && G.phase === 'PLAY' && idx !== G.turnIdx;
+        seats.push({
+          id: p.id, left: pos.left, top: pos.top, turn, next, escaped: !!p.escaped,
+          avatar: p.avatar || AvatarModule.getDefaultAvatar(p.type, p.persona),
+          score: scoreFor(p),
+          handCount: p.hand.length,
+          fullName: p.name,
+          name: p.type === 'bot' ? p.name.replace(/\s*\((Fácil|Médio|Difícil)\)\s*$/, '') : p.name,
+          status: p.escaped ? '✔ Salvo!' : (turn ? 'jogando…' : (next ? 'próximo' : '')),
+          slots: [0, 1, 2].map(i => {
+            const o = p.open[i];
+            if (o) return { kind: 'open', red: !!o.isRed, label: o.isJoker ? '★' : o.label };
+            return { kind: p.closed[i] ? 'closed' : 'empty' };
+          })
+        });
       }
+      Mesa.seats(oppArea, seats);
     }
 
     function renderDrawPile() {
@@ -2851,24 +2840,19 @@
     }
 
     function renderBurnedPile() {
-      const el = document.getElementById('burned-pile-visual');
       const n = G.burnedCount || 0;
       document.getElementById('lbl-burned-badge').textContent = n;
-      const layers = Math.min(6, Math.ceil(n / 4));
-      if (el.childElementCount === layers) return; // evita recriar sem necessidade
-      el.innerHTML = '';
-      for (let i = 0; i < layers; i++) {
-        const c = createCardDOM(null, true);
+      const items = [];
+      for (let i = 0, layers = Math.min(6, Math.ceil(n / 4)); i < layers; i++) {
         const j = cardJitter({ id: 'burn' + i });
-        c.style.transform = `translate(${(j * 6 - 3).toFixed(1)}px, ${-i * 1.5}px) rotate(${(j * 30 - 15).toFixed(1)}deg)`;
-        el.appendChild(c);
+        items.push({ key: 'burn' + i, card: null, style: { transform: `translate(${(j * 6 - 3).toFixed(1)}px, ${-i * 1.5}px) rotate(${(j * 30 - 15).toFixed(1)}deg)` } });
       }
+      Mesa.pile(document.getElementById('burned-pile-visual'), items, []);
     }
 
     let wasPileTense = false;
     function renderDiscardPileMessy() {
       const discardEl = document.getElementById('discard-pile-visual');
-      discardEl.innerHTML = '';
       const totalCards = G.discard.length;
       const badge = document.getElementById('lbl-discard-badge');
       badge.textContent = `Monte ${totalCards}`;
@@ -2885,64 +2869,49 @@
       if (tense) badge.textContent = `🔥 Monte ${totalCards} 🔥`;
       if (tense && !wasPileTense && !turboMode) SoundEngine.heartbeat();
       wasPileTense = tense;
-      if (totalCards === 0) return;
+      const items = [], tags = [];
+      if (totalCards > 0) {
+        const groups = G.discardPlayGroups && G.discardPlayGroups.length > 0
+          ? G.discardPlayGroups
+          : [{ playerName: '', cards: G.discard.slice(-2) }];
+        const lastGroup = groups[groups.length - 1];
+        const penultimateGroup = groups.length >= 2 ? groups[groups.length - 2] : null;
+        const visibleCount = lastGroup.cards.length + (penultimateGroup ? penultimateGroup.cards.length : 0);
+        const olderCards = G.discard.slice(0, Math.max(0, totalCards - visibleCount));
 
-      const groups = G.discardPlayGroups && G.discardPlayGroups.length > 0
-        ? G.discardPlayGroups
-        : [{ playerName: '', cards: G.discard.slice(-2) }];
-      const lastGroup = groups[groups.length - 1];
-      const penultimateGroup = groups.length >= 2 ? groups[groups.length - 2] : null;
-      const visibleCount = lastGroup.cards.length + (penultimateGroup ? penultimateGroup.cards.length : 0);
-      const olderCards = G.discard.slice(0, Math.max(0, totalCards - visibleCount));
-
-      // Base volumosa: as cartas soterradas formam um bolo bagunçado (estável entre renders)
-      const step = Math.max(1, Math.ceil(olderCards.length / 9));
-      let layer = 0;
-      for (let i = 0; i < olderCards.length; i += step) {
-        const c = olderCards[i];
-        const dom = createCardDOM(c, false);
-        dom.classList.add('pile-body');
-        const jx = cardJitter(c, 'x') * 16 - 8;
-        const jr = cardJitter(c, 'r') * 50 - 25;
-        dom.style.transform = `translate(${jx.toFixed(1)}px, ${(4 - layer * 0.8).toFixed(1)}px) rotate(${jr.toFixed(1)}deg) scale(0.96)`;
-        discardEl.appendChild(dom);
-        layer++;
-      }
-
-      // Penúltima jogada (à esquerda, levemente escurecida)
-      if (penultimateGroup) {
-        penultimateGroup.cards.forEach((c, idx) => {
-          const dom = createCardDOM(c, false);
-          const angle = -16 + idx * 7 + cardJitter(c, 'p') * 6;
-          dom.style.transform = `translate(${-20 + idx * 9}px, ${-6 + idx * 2}px) rotate(${angle.toFixed(1)}deg) scale(0.95)`;
-          dom.style.filter = 'brightness(0.82)';
-          discardEl.appendChild(dom);
+        // Base volumosa: as cartas soterradas formam um bolo bagunçado (estável entre renders)
+        const step = Math.max(1, Math.ceil(olderCards.length / 9));
+        let layer = 0;
+        for (let i = 0; i < olderCards.length; i += step) {
+          const c = olderCards[i];
+          const jx = cardJitter(c, 'x') * 16 - 8;
+          const jr = cardJitter(c, 'r') * 50 - 25;
+          items.push({ key: 'b' + c.id, card: c, power: powerIcon(c), cls: 'pile-body',
+            style: { transform: `translate(${jx.toFixed(1)}px, ${(4 - layer * 0.8).toFixed(1)}px) rotate(${jr.toFixed(1)}deg) scale(0.96)` } });
+          layer++;
+        }
+        // Penúltima jogada (à esquerda, levemente escurecida)
+        if (penultimateGroup) {
+          penultimateGroup.cards.forEach((c, idx) => {
+            const angle = -16 + idx * 7 + cardJitter(c, 'p') * 6;
+            items.push({ key: 'p' + c.id, card: c, power: powerIcon(c),
+              style: { transform: `translate(${-20 + idx * 9}px, ${-6 + idx * 2}px) rotate(${angle.toFixed(1)}deg) scale(0.95)`, filter: 'brightness(0.82)' } });
+          });
+        }
+        // Última jogada (topo, espalhada e nítida)
+        lastGroup.cards.forEach((c, idx) => {
+          const baseX = penultimateGroup ? 14 : 0;
+          const baseY = penultimateGroup ? 5 : 0;
+          const angle = (cardJitter(c, 'l') * 26 - 13);
+          items.push({ key: 'l' + c.id, card: c, power: powerIcon(c),
+            style: { transform: `translate(${baseX + idx * 11}px, ${baseY + (idx % 2 ? -3 : 2)}px) rotate(${angle.toFixed(1)}deg)`, boxShadow: '0 6px 14px rgba(0,0,0,0.55)' } });
         });
+        // Selos "quem jogou": fora das cartas (que são giradas) para nunca ficarem escondidos
+        // atrás da carta de cima — penúltima jogada à esquerda, última à direita
+        if (penultimateGroup) tags.push({ cls: 'tag-prev', text: `${penultimateGroup.playerName.split(' ')[0]} ${penultimateGroup.cards.length}x` });
+        tags.push({ cls: 'tag-latest', text: `${(lastGroup.playerName || 'Topo').split(' ')[0]} ${lastGroup.cards.length}x` });
       }
-
-      // Última jogada (topo, espalhada e nítida)
-      lastGroup.cards.forEach((c, idx) => {
-        const dom = createCardDOM(c, false);
-        const baseX = penultimateGroup ? 14 : 0;
-        const baseY = penultimateGroup ? 5 : 0;
-        const angle = (cardJitter(c, 'l') * 26 - 13);
-        dom.style.transform = `translate(${baseX + idx * 11}px, ${baseY + (idx % 2 ? -3 : 2)}px) rotate(${angle.toFixed(1)}deg)`;
-        dom.style.boxShadow = '0 6px 14px rgba(0,0,0,0.55)';
-        discardEl.appendChild(dom);
-      });
-
-      // Selos "quem jogou": fora das cartas (que são giradas) para nunca ficarem escondidos
-      // atrás da carta de cima — penúltima jogada à esquerda, última à direita
-      if (penultimateGroup) {
-        const tag = document.createElement('div');
-        tag.className = 'discard-play-tag tag-prev';
-        tag.textContent = `${penultimateGroup.playerName.split(' ')[0]} ${penultimateGroup.cards.length}x`;
-        discardEl.appendChild(tag);
-      }
-      const lastTag = document.createElement('div');
-      lastTag.className = 'discard-play-tag tag-latest';
-      lastTag.textContent = `${(lastGroup.playerName || 'Topo').split(' ')[0]} ${lastGroup.cards.length}x`;
-      discardEl.appendChild(lastTag);
+      Mesa.pile(discardEl, items, tags);
     }
 
     // Mão recolhida/aberta (a camada ampliada fica sobre a mesa e não empurra o layout)
@@ -2974,8 +2943,7 @@
         if (g) g.n++;
         else groups.push({ key, label: c.isJoker ? '★' : c.label, joker: !!c.isJoker, red: !c.isJoker && c.isRed, n: 1 });
       });
-      const cardHtml = g => `<span class="dock-card${g.joker ? ' joker' : ''}">${esc(g.label)}${g.n > 1 ? `<i>×${g.n}</i>` : ''}</span>`;
-      const items = hideHand ? (n ? ['<span class="dock-card back"></span>'] : []) : groups.map(cardHtml);
+      const items = hideHand ? (n ? [{ back: true }] : []) : groups;
       // Espaçamento: as miniaturas se sobrepõem só o necessário para caber na largura (fixa) do leque;
       // se não couber legível numa linha, usa duas
       const cardW = 24;
@@ -2986,9 +2954,7 @@
       const step = Math.max(10, Math.min(cardW + 3, fitStep(perRow)));
       fan.style.setProperty('--dock-step', `${step.toFixed(1)}px`);
       fan.classList.toggle('two-rows', twoRows);
-      fan.innerHTML = twoRows
-        ? `<span class="dock-row">${items.slice(0, perRow).join('')}</span><span class="dock-row">${items.slice(perRow).join('')}</span>`
-        : `<span class="dock-row">${items.join('')}</span>`;
+      Mesa.dock(fan, twoRows ? [items.slice(0, perRow), items.slice(perRow)] : [items]);
       label.innerHTML = me.escaped ? '✔ Escapou'
         : `${isMyTurn ? '<span class="dock-turn">⚡<span class="dock-turn-txt"> Vez</span></span>' : ''}<span class="dock-n">${n}</span><span class="dock-sub">na mão</span>`;
       dock.title = handOpen ? 'Recolher a mão' : 'Ampliar a mão';
@@ -3058,54 +3024,35 @@
       document.getElementById('lbl-my-hand-count').textContent =
         me.escaped ? '✔ Você escapou!' : (isMyTurn ? `⚡ Sua vez · ${me.hand.length} na mão` : `🃏 ${me.hand.length} na mão`);
 
-      // Cartas da mesa (fechadas + abertas por cima)
-      const myTableEl = document.getElementById('my-table-cards');
-      myTableEl.innerHTML = '';
-      for (let i = 0; i < 3; i++) {
-        const stack = document.createElement('div');
-        stack.className = 'table-stack';
-        const closedCard = me.closed[i];
-        const openCard = me.open[i];
-        if (!closedCard && !openCard) stack.classList.add('empty-slot');
-        if (closedCard) {
-          const cDom = createCardDOM(closedCard, true);
-          cDom.classList.add('closed-under');
-          cDom.dataset.cardId = closedCard.id;
-          if (!spectator) attachCardInteraction(cDom, closedCard, 'closed', me, isMyTurn);
-          stack.appendChild(cDom);
-        }
-        if (openCard) {
-          const oDom = createCardDOM(openCard, false);
-          oDom.classList.add('open-over');
-          oDom.dataset.cardId = openCard.id;
-          if (selectedOpenIds.has(openCard.id)) oDom.classList.add('selected');
-          if (isMyTurn && me.hand.length === 0 && G.deck.length === 0 && RulesEngine.isCardPlayable(G, openCard)) oDom.classList.add('playable');
-          if (!spectator) attachCardInteraction(oDom, openCard, 'open', me, isMyTurn);
-          stack.appendChild(oDom);
-        }
-        myTableEl.appendChild(stack);
-      }
-
-      // Mão (preserva a posição de rolagem entre renders)
-      const myHandEl = document.getElementById('my-hand-cards');
-      const prevScroll = myHandEl.scrollLeft;
-      myHandEl.innerHTML = '';
-      const sortedHand = [...me.hand].sort((a, b) => a.val - b.val);
-      myHandEl.appendChild(Object.assign(document.createElement('div'), { className: 'hand-spacer' }));
-      sortedHand.forEach(card => {
-        const hDom = createCardDOM(card, hideHand);
-        hDom.dataset.cardId = card.id;
-        if (G.phase === 'SWAP' && swapHandId === card.id) hDom.classList.add('selected');
-        if (G.phase === 'PLAY' && selectedHandIds.has(card.id)) hDom.classList.add('selected');
-        if (isMyTurn && RulesEngine.isCardPlayable(G, card)) hDom.classList.add('playable');
-        if (!spectator) attachCardInteraction(hDom, card, 'hand', me, isMyTurn);
-        myHandEl.appendChild(hDom);
+      // Cartas da mesa (fechadas + abertas por cima) e mão: componentes (js/mesa/componentes.js).
+      // bind liga o toque uma vez por carta e atualiza os dados a cada desenho.
+      const item = (card, sourceType, cls) => ({
+        card, cls, power: powerIcon(card),
+        bind: (el) => bindCard(el, { card, sourceType, me, isMyTurn, off: spectator })
       });
-      myHandEl.appendChild(Object.assign(document.createElement('div'), { className: 'hand-spacer' }));
+      const tablePlayable = isMyTurn && me.hand.length === 0 && G.deck.length === 0;
+      Mesa.table(document.getElementById('my-table-cards'), [0, 1, 2].map(i => {
+        const c = me.closed[i], o = me.open[i];
+        return {
+          closed: c ? item(c, 'closed', '') : null,
+          open: o ? item(o, 'open', [selectedOpenIds.has(o.id) && 'selected', tablePlayable && RulesEngine.isCardPlayable(G, o) && 'playable'].filter(Boolean).join(' ')) : null
+        };
+      }));
+
+      // Mão (o elemento continua o mesmo entre desenhos: a rolagem se mantém sozinha)
+      const myHandEl = document.getElementById('my-hand-cards');
+      const sortedHand = [...me.hand].sort((a, b) => a.val - b.val);
+      Mesa.hand(myHandEl, sortedHand.map(card => {
+        const it = item(card, 'hand', [
+          ((G.phase === 'SWAP' && swapHandId === card.id) || (G.phase === 'PLAY' && selectedHandIds.has(card.id))) && 'selected',
+          isMyTurn && RulesEngine.isCardPlayable(G, card) && 'playable'
+        ].filter(Boolean).join(' '));
+        it.back = hideHand;
+        return it;
+      }));
       // Sobrepõe as cartas quando não cabem todas lado a lado
       const cw = parseFloat(getComputedStyle(myHandEl).getPropertyValue('--card-w')) || 58;
       myHandEl.classList.toggle('hand-dense', sortedHand.length * (cw + 6) > myHandEl.clientWidth - 16);
-      myHandEl.scrollLeft = prevScroll;
 
       // Mão recolhida no canto (leque pequeno) + abertura automática na sua vez
       renderHandDock(me, sortedHand, hideHand, isMyTurn);

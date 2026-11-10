@@ -11,6 +11,7 @@
                           histórico público de jogadas (PlayHistory)
      bots/ia.js           IA dos bots
      rede/sanitizar.js    limpeza de tudo que chega da rede, código da sala
+     mesa/componentes.js  desenho da mesa em componentes (Preact + htm, vendor/)
    O game.js (tela, rede, fluxo da partida) ainda é um script clássico que usa esses
    nomes como globais. Esta ponte os entrega em window e só então carrega o game.js,
    na ordem certa em qualquer navegador. As ferramentas de teste (tests/) usam os
@@ -28,10 +29,12 @@ import { Core } from './nucleo/motor.js';
 import { HISTORY_MAX, historyBefore, addHistory, historyText } from './nucleo/historico.js';
 import { AIEngine } from './bots/ia.js';
 import * as Sanitizar from './rede/sanitizar.js';
+import { Mesa } from './mesa/componentes.js';
 
 Object.assign(window, {
   AppConfig, Store, LogDB, AvatarModule, NetLog, LoggerModule, SoundEngine,
   Rng, stateDigest, RulesEngine, Core, AIEngine,
+  Mesa,
   PlayHistory: { MAX: HISTORY_MAX, before: historyBefore, add: addHistory, text: historyText }
 }, Sanitizar);
 
