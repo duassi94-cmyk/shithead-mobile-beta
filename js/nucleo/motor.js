@@ -188,6 +188,7 @@ const Core = (() => {
 
   /* ---- Ações do jogador ------------------------------------------------------
      action: SWAP_CARDS {handId, openId} · READY_SWAP · READY_AUTO (bot assumiu)
+             · UNREADY_RETURN (a pessoa voltou ainda na preparação: pode trocar de novo)
              PICKUP_PILE · PLAY_BLIND {cardId} · PLAY_CARDS {handIds, openIds}
      Devolve { ok, events }. Ação inválida para o momento: ok=false, mesa intacta. */
   function apply(S, playerId, action) {
@@ -222,6 +223,13 @@ const Core = (() => {
       // Um bot assumiu o lugar (queda ou remoção): conta como pronto na preparação.
       // Quem chama decide quando conferir o início (startIfReady), depois de ajustar a mesa.
       player.readySwap = true;
+      return { ok: true, events: E };
+    }
+
+    if (t === 'UNREADY_RETURN') {
+      if (S.phase !== 'SWAP' || !player.readySwap) return { ok: false, events: E };
+      player.readySwap = false;
+      E.push({ type: 'changed' });
       return { ok: true, events: E };
     }
 
@@ -353,8 +361,8 @@ const Core = (() => {
     let reversed = false;
     let sfxTag = 'PLAY';
 
-    // 4 iguais (1 baralho) / 8 iguais (2 baralhos): invertem o sentido
-    const targetSame = r.decks === 1 ? 4 : 8;
+    // 4 iguais (1 baralho) / 8 iguais (2 baralhos, ou 4 se a mesa escolheu): invertem o sentido
+    const targetSame = r.decks === 1 ? 4 : (r.count48 === 4 ? 4 : 8);
     if (r.p48 && !sample.isJoker) {
       if (r.mode48 === 'together') {
         if (countPlayed >= targetSame) reversed = true;

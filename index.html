@@ -309,8 +309,15 @@
               </select>
             </div>
             <div class="row">
-              <label for="chk-p48">4 Iguais (1 bar.) / 8 Iguais (2 bar.) inverte ordem:</label>
+              <label for="chk-p48">Cartas iguais invertem a ordem (4 com 1 baralho):</label>
               <input type="checkbox" id="chk-p48" checked />
+            </div>
+            <div class="row row-select">
+              <label for="sel-48count">Com 2 baralhos, invertem a partir de:</label>
+              <select id="sel-48count">
+                <option value="8" selected>8 iguais (Padrão)</option>
+                <option value="4">4 iguais</option>
+              </select>
             </div>
             <div class="row row-select">
               <label for="sel-48mode">Contagem de cartas iguais:</label>
@@ -342,6 +349,13 @@
                 <option value="bot" selected>O bot joga pela pessoa</option>
                 <option value="pickup">A pessoa recolhe o monte</option>
                 <option value="warn">Só um aviso</option>
+              </select>
+            </div>
+            <div class="row row-select">
+              <label for="sel-drop">Quando alguém cai da conexão:</label>
+              <select id="sel-drop">
+                <option value="bot" selected>Um bot joga por ele até voltar</option>
+                <option value="wait">A mesa espera ele voltar (até 3 min)</option>
               </select>
             </div>
             <div id="warn-no-burn" class="rules-warning start-hidden">
@@ -467,6 +481,7 @@
         </div>
         <!-- Menu ⋯ da mesa: o que não precisa ficar à vista durante a jogada -->
         <div id="game-menu" class="game-menu" hidden>
+          <button id="btn-room-game" class="menu-item" type="button" hidden><svg class="ico"><use href="#i-share"/></svg><span>Sala <strong id="lbl-room-game">-----</strong> · convidar</span></button>
           <button id="btn-turbo" class="menu-item" type="button" hidden><svg class="ico"><use href="#i-fast"/></svg><span>Acelerar até o fim</span></button>
           <button id="btn-board-game" class="menu-item" type="button"><svg class="ico"><use href="#i-trophy"/></svg><span>Placar</span></button>
           <button id="btn-history-game" class="menu-item" type="button"><svg class="ico"><use href="#i-list"/></svg><span>Jogadas</span></button>

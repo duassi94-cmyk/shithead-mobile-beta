@@ -69,6 +69,15 @@
       });
     }
 
+    // Aviso curto na mesa, sem som de erro nem tremida
+    function showInfoToast(msg) {
+      const toast = document.getElementById('toast-warning');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
     function showInvalidWarning(msg, elementToShake = null) {
       SoundEngine.invalidError();
       const toast = document.getElementById('toast-warning');
@@ -499,10 +508,12 @@
           document.getElementById('chk-p48').checked = r.p48 ?? true;
           document.getElementById('sel-48mode').value = r.mode48 || 'sequence';
           document.getElementById('chk-48burn').checked = r.burn48 ?? false;
+          document.getElementById('sel-48count').value = String(r.count48 === 4 ? 4 : 8);
           document.getElementById('inp-bigpile').value = sanitizeBigPile(r.bigPile, r.decks === 2 ? 2 : 1);
           const t = sanitizeRules(r);
           document.getElementById('sel-timer').value = String(t.timer);
           document.getElementById('sel-timeout').value = t.timeout;
+          document.getElementById('sel-drop').value = t.drop;
         } catch (e) {}
       }
       lastDecksForBigPile = parseInt(document.getElementById('sel-decks').value, 10) === 2 ? 2 : 1;
@@ -557,10 +568,13 @@
         p48: document.getElementById('chk-p48').checked,
         mode48: document.getElementById('sel-48mode').value,
         burn48: document.getElementById('chk-48burn').checked,
+        count48: document.getElementById('sel-48count').value === '4' ? 4 : 8,
         bigPile: syncBigPileInput(decks),
         // Cronômetro: configuração da mesa (fica fora das predefinições e das regras próprias)
         timer: parseInt(document.getElementById('sel-timer').value, 10) || 0,
-        timeout: document.getElementById('sel-timeout').value
+        timeout: document.getElementById('sel-timeout').value,
+        // Queda de conexão: bot assume na hora ou a mesa espera (também fora das predefinições)
+        drop: document.getElementById('sel-drop').value === 'wait' ? 'wait' : 'bot'
       };
       document.getElementById('sel-timeout').disabled = !rules.timer;
       Store.set('sh_rules', JSON.stringify(rules));
@@ -842,10 +856,7 @@
       // Se estiver numa partida em andamento, um bot assume o lugar
       const gp = G && G.phase !== 'GAMEOVER' && G.phase !== 'ABANDONED' ? G.players.find(p => p.id === pid) : null;
       if (gp) {
-        gp.type = 'bot';
-        gp.persona = 'medium';
-        markReadyByTakeover(gp);
-        gp.disconnected = true;
+        botTakesSeat(gp); // removido pelo host: o bot assume na hora (mesmo com a mesa esperando quedas)
         // Na preparação, se todos os outros já estavam prontos, a partida começa
         if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
         broadcastState();
@@ -892,6 +903,12 @@
        diferentes (ex.: Firefox Android ↔ Chrome). Aqui toda mensagem grande é
        dividida em pedaços pequenos e remontada do outro lado. */
     const NET_CHUNK = 12000;
+    // O PeerJS ('json') transforma em texto de novo o que mandamos e recusa acima de
+    // 16.300 bytes ("Message too big for JSON channel"), derrubando a conexão. Conta em
+    // bytes do que vai de fato pelo fio: aspas escapadas duas vezes e naipes (♠ = 3 bytes).
+    const NET_MAX_BYTES = 15000;
+    const netEncoder = new TextEncoder();
+    const wireBytes = (payload) => netEncoder.encode(JSON.stringify(payload)).length;
     let netMsgSeq = 0;
 
     /* ---- Log de conexão ---------------------------------------------------------
@@ -951,14 +968,29 @@
       }
       const text = JSON.stringify(msg);
       try {
-        if (text.length <= NET_CHUNK) {
+        if (text.length <= NET_CHUNK && wireBytes(text) <= NET_MAX_BYTES) {
           conn.send(text);
         } else {
           const id = `${Date.now().toString(36)}_${netMsgSeq++}`;
-          const n = Math.ceil(text.length / NET_CHUNK);
-          for (let i = 0; i < n; i++) {
-            conn.send(JSON.stringify({ type: 'CHUNK', id, i, n, part: text.slice(i * NET_CHUNK, (i + 1) * NET_CHUNK) }));
+          // Pedaços que cabem no limite em bytes (diminui o pedaço até caber)
+          const parts = [];
+          let size = NET_CHUNK;
+          for (let pos = 0; pos < text.length;) {
+            let part;
+            for (;;) {
+              let end = Math.min(text.length, pos + size);
+              // não corta um emoji (par de substitutos) ao meio
+              if (end < text.length && /[\ud800-\udbff]/.test(text[end - 1])) end--;
+              part = text.slice(pos, end);
+              if (size <= 500 || wireBytes(JSON.stringify({ type: 'CHUNK', id, i: 99, n: 99, part })) <= NET_MAX_BYTES) break;
+              size = Math.floor(size * 0.7);
+            }
+            parts.push(part);
+            pos += part.length;
           }
+          const n = parts.length;
+          if (n > 100) { nlog('send_too_big', { type: msg.type, bytes: text.length, parts: n }); NetLog.count('send_too_big'); return false; }
+          parts.forEach((part, i) => conn.send(JSON.stringify({ type: 'CHUNK', id, i, n, part })));
           NetLog.count('chunked_out');
           if (text.length > 30000) nlog('big_message', { type: msg.type, bytes: text.length, parts: n });
         }
@@ -1318,17 +1350,21 @@
       if (clientConns.some(c => c.__playerId === pid)) return;
       const slot = lobbySlots.find(s => s.id === pid);
       const inGame = G && G.phase !== 'GAMEOVER' && G.phase !== 'ABANDONED' && G.players.some(p => p.id === pid);
-      nlog('guest_left', { pid: shortId(pid), name: slot ? slot.name : null, inGame: !!inGame, botTookOver: !!inGame });
+      const waits = !!inGame && dropWaits();
+      nlog('guest_left', { pid: shortId(pid), name: slot ? slot.name : null, inGame: !!inGame, botTookOver: !!inGame && !waits, waits });
       NetLog.count('guest_left');
       if (inGame) {
-        // Durante a partida: um bot assume o lugar até a pessoa voltar
         const p = G.players.find(pl => pl.id === pid);
-        p.type = 'bot';
-        p.persona = 'medium';
-        markReadyByTakeover(p);
-        p.disconnected = true;
-        G.bannerText = `${p.name} caiu — um bot está jogando por ele(a) até voltar.`;
-        if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
+        if (waits) {
+          // Regra da mesa: espera a pessoa voltar (a vez dela fica parada); depois de um tempo, bot
+          waitForReturn(p);
+          G.bannerText = `${p.name} caiu — a mesa espera até ${DROP_WAIT_MIN} min ele(a) voltar.`;
+        } else {
+          // Um bot assume o lugar até a pessoa voltar
+          botTakesSeat(p);
+          G.bannerText = `${p.name} caiu — um bot está jogando por ele(a) até voltar.`;
+          if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
+        }
         broadcastState();
         renderGame();
         renderLobbySlots();
@@ -1339,6 +1375,40 @@
         broadcastLobby();
       }
       setNetStatus('host-net-status', `${slot ? slot.name : 'Um jogador'} saiu da sala.`, 'warn');
+    }
+
+    /* ---- Queda de um convidado durante a partida ------------------------------------
+       Regra da mesa (rules.drop): 'bot' = um bot joga por ele até voltar (padrão);
+       'wait' = a mesa espera (a vez dele fica parada, a troca não começa sem ele) por até
+       DROP_WAIT_MIN minutos; se não voltar, um bot assume. Só o host conta o tempo. */
+    const DROP_WAIT_MIN = 3;
+    const dropWaitTimers = {};
+    const dropWaits = () => !!(G && G.rules && G.rules.drop === 'wait');
+    function clearDropWait(pid) { clearTimeout(dropWaitTimers[pid]); delete dropWaitTimers[pid]; }
+    function botTakesSeat(p) {
+      clearDropWait(p.id);
+      p.type = 'bot';
+      p.persona = 'medium';
+      markReadyByTakeover(p);
+      p.disconnected = true;
+    }
+    function waitForReturn(p) {
+      p.disconnected = true;
+      clearDropWait(p.id);
+      dropWaitTimers[p.id] = setTimeout(() => {
+        delete dropWaitTimers[p.id];
+        if (!G || G.phase === 'GAMEOVER' || G.phase === 'ABANDONED') return;
+        const q = G.players.find(x => x.id === p.id);
+        if (!q || !q.disconnected || q.type !== 'human') return;
+        nlog('drop_wait_over', { pid: shortId(q.id), min: DROP_WAIT_MIN });
+        botTakesSeat(q);
+        G.bannerText = `${q.name} não voltou a tempo — um bot assumiu o lugar.`;
+        if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection();
+        broadcastState();
+        renderGame();
+        renderLobbySlots();
+        scheduleBotIfNeeded();
+      }, DROP_WAIT_MIN * 60 * 1000);
     }
 
     async function joinRoom(code) {
@@ -1596,9 +1666,10 @@
     });
 
     // Compartilhar convite (WhatsApp etc.) ou copiar o link
-    document.getElementById('btn-share-invite').addEventListener('click', async () => {
-      const url = getJoinUrl(roomCode);
-      const text = `Bora jogar Shithead! Sala ${roomCode}`;
+    // Convite da sala (link + código): compartilhar do celular ou copiar. say(texto, tipo) avisa o resultado.
+    async function shareInvite(code, say) {
+      const url = getJoinUrl(code);
+      const text = `Bora jogar Shithead! Sala ${code}`;
       try {
         if (navigator.share) {
           await navigator.share({ title: 'Shithead!', text, url });
@@ -1607,10 +1678,17 @@
       } catch (e) { if (e && e.name === 'AbortError') return; }
       try {
         await navigator.clipboard.writeText(url);
-        setNetStatus('host-net-status', 'Link copiado! Cole no WhatsApp ou onde quiser.', 'ok');
+        say('Link copiado! Cole no WhatsApp ou onde quiser.', 'ok');
       } catch (e) {
-        setNetStatus('host-net-status', url, 'info');
+        say(url, 'info');
       }
+    }
+    document.getElementById('btn-share-invite').addEventListener('click', () =>
+      shareInvite(roomCode, (msg, kind) => setNetStatus('host-net-status', msg, kind)));
+    // Na mesa (menu ⋯): o código da sala fica à vista e dá para chamar mais alguém
+    document.getElementById('btn-room-game').addEventListener('click', () => {
+      const code = isHost ? roomCode : joinRoomCode;
+      if (code) shareInvite(code, (msg) => showInfoToast(msg));
     });
 
     // Segredo de cada aparelho (memória do host): impede que alguém use o id de
@@ -1732,11 +1810,15 @@
         // (partida já terminada não conta: quem volta fica na sala, sem reabrir a mesa)
         const gp = G && G.phase !== 'ABANDONED' && G.phase !== 'GAMEOVER' ? G.players.find(p => p.id === data.id) : null;
         if (gp) {
+          const botHadSeat = gp.type === 'bot';
+          clearDropWait(gp.id);
           gp.type = 'human';
           gp.persona = null;
           gp.disconnected = false;
           gp.name = name;
           G.bannerText = `${name} voltou para a mesa!`;
+          // Voltou ainda na preparação: o bot o tinha marcado como pronto; libera a troca
+          if (botHadSeat && G.phase === 'SWAP' && gp.readySwap) markBackInSwap(gp);
           // Um humano voltou com cartas: sai do modo acelerado
           if (!gp.escaped) { turboMode = false; G.turbo = false; }
           clearTimeout(aiTimeout);
@@ -2124,6 +2206,13 @@
       Core.apply(G, p.id, { type: 'READY_AUTO' });
     }
 
+    // A pessoa voltou antes do começo: pode trocar cartas de novo (o replay também refaz)
+    function markBackInSwap(p) {
+      if (!G || G.phase !== 'SWAP' || !p.readySwap) return;
+      recordReplayAction(p.id, { type: 'UNREADY_RETURN' });
+      Core.apply(G, p.id, { type: 'UNREADY_RETURN' });
+    }
+
     function recordReplayCheck() {
       if (G && matchActionCount > 0 && matchActionCount % 20 === 0) LoggerModule.logCheck(matchActionCount, stateDigest(G));
     }
@@ -2212,16 +2301,12 @@
       const logOk = LoggerModule.resumeSession(d.log);
       nlog('host_resumed', { phase: G.phase, actions: matchActionCount, online: !!d.roomCode, awayS: Math.round((Date.now() - d.at) / 1000), log: logOk });
       // Os convidados estão fora até reconectarem: um bot joga por eles (como numa queda)
-      const away = G.players.filter(p => p.id !== myPlayerId && p.type === 'human');
-      away.forEach(p => {
-        p.type = 'bot';
-        p.persona = 'medium';
-        markReadyByTakeover(p);
-        p.disconnected = true;
-      });
-      G.bannerText = away.length
-        ? 'Partida retomada! Os convidados estão voltando — um bot joga por eles até reconectarem.'
-        : 'Partida retomada!';
+      const away = G.players.filter(p => p.id !== myPlayerId && (p.type === 'human' || p.disconnected));
+      // Quem já estava com bot continua com bot; os outros seguem a regra da mesa para quedas
+      away.forEach(p => { if (p.type !== 'human') return; if (dropWaits()) waitForReturn(p); else botTakesSeat(p); });
+      G.bannerText = !away.length ? 'Partida retomada!'
+        : (dropWaits() ? `Partida retomada! A mesa espera os convidados voltarem (até ${DROP_WAIT_MIN} min).`
+          : 'Partida retomada! Os convidados estão voltando — um bot joga por eles até reconectarem.');
       renderScoreboard();
       selectedHandIds.clear();
       selectedOpenIds.clear();
@@ -2253,7 +2338,7 @@
       SoundEngine.init();
       SoundEngine.slide();
       const rules = opts.rules ? { ...opts.rules } : (currentMode === 'tutorial'
-        ? { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, bigPile: 12 }
+        ? { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, count48: 8, bigPile: 12 }
         : getRulesFromUI());
       // O motor embaralha, sorteia os lugares e distribui. A semente é secreta: fica só no
       // host e no log dele (nunca entra em G, que vai pela rede).
@@ -2970,7 +3055,8 @@
           handCount: p.hand.length,
           fullName: p.name,
           name: p.type === 'bot' ? p.name.replace(/\s*\((Fácil|Médio|Difícil)\)\s*$/, '') : p.name,
-          status: p.escaped ? '✔ Salvo!' : (turn ? 'jogando…' : (next ? 'próximo' : '')),
+          status: p.escaped ? '✔ Salvo!' : (p.disconnected && p.type === 'human' ? (turn ? 'caiu · esperando' : 'caiu')
+            : (turn ? 'jogando…' : (next ? 'próximo' : ''))),
           slots: [0, 1, 2].map(i => {
             const o = p.open[i];
             if (o) return { kind: 'open', red: !!o.isRed, suit: o.isJoker ? '' : o.suit, label: o.isJoker ? '★' : o.label, spoken: Mesa.cardSpoken(o) };
@@ -3173,6 +3259,10 @@
       renderClock();
 
       // ⏩ "Acelerar até o fim" (menu ⋯, com um pontinho no ⋯): aparece quando você já escapou (ou na simulação)
+      // Código da sala no menu ⋯ (partida online)
+      const tableCode = isHost ? roomCode : (guestJoinedRoom || joinRoomCode);
+      document.getElementById('btn-room-game').hidden = !(tableCode && G.mode !== 'tutorial');
+      if (tableCode) document.getElementById('lbl-room-game').textContent = tableCode;
       const turboBtn = document.getElementById('btn-turbo');
       // ⏩ liberado na simulação ou quando todos que ainda têm cartas são bots (host ou convidado)
       const turboOn = turboMode || !!G.turbo;
@@ -3696,13 +3786,13 @@
        Tocar no cartão carrega a regra nos mesmos campos da personalização. */
     const RULE_PRESETS = [
       { id: 'casa', name: 'Da casa', desc: '1 Coringa por baralho, que gira as mãos · 10 queima e passa a vez · iguais invertem',
-        rules: { jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, bigPile: null } },
+        rules: { jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, count48: 8, bigPile: null } },
       { id: 'classico', name: 'Clássico', desc: 'Sem Coringa · 10 queima e você joga de novo · iguais invertem e queimam',
-        rules: { jokers: 0, p2: true, draw2: 1, p7: true, p10: true, after10: 'again', pjoker: false, multijoker: 'once', p48: true, mode48: 'sequence', burn48: true, bigPile: null } },
+        rules: { jokers: 0, p2: true, draw2: 1, p7: true, p10: true, after10: 'again', pjoker: false, multijoker: 'once', p48: true, mode48: 'sequence', burn48: true, count48: 8, bigPile: null } },
       { id: 'caotico', name: 'Caótico', desc: '2 Coringas por baralho, cada um gira as mãos · 2 com a mão vazia compra 3 · iguais juntas invertem e queimam',
-        rules: { jokers: 2, p2: true, draw2: 3, p7: true, p10: true, after10: 'again', pjoker: true, multijoker: 'per_joker', p48: true, mode48: 'together', burn48: true, bigPile: null } }
+        rules: { jokers: 2, p2: true, draw2: 3, p7: true, p10: true, after10: 'again', pjoker: true, multijoker: 'per_joker', p48: true, mode48: 'together', burn48: true, count48: 8, bigPile: null } }
     ];
-    const BASE_KEYS = ['p2', 'draw2', 'p7', 'p10', 'after10', 'pjoker', 'multijoker', 'p48', 'mode48', 'burn48'];
+    const BASE_KEYS = ['p2', 'draw2', 'p7', 'p10', 'after10', 'pjoker', 'multijoker', 'p48', 'mode48', 'burn48', 'count48'];
     let roomRules = null;      // convidado: regras que o host mandou
     let lastPickedMine = null; // regra própria carregada por último (Salvar atualiza ela)
 
@@ -3768,7 +3858,7 @@
       if (!r.p2) parts.push('2 sem poder'); else if (r.draw2 === 3) parts.push('2 compra 3');
       if (!r.p7) parts.push('7 sem poder');
       if (r.pjoker && r.multijoker === 'per_joker') parts.push('giro por Coringa');
-      if (!r.p48) parts.push('iguais sem poder'); else parts.push(`iguais ${r.mode48 === 'together' ? 'juntas' : 'em sequência'}${r.burn48 ? ' queimam' : ''}`);
+      if (!r.p48) parts.push('iguais sem poder'); else parts.push(`iguais ${r.mode48 === 'together' ? 'juntas' : 'em sequência'}${r.burn48 ? ' queimam' : ''}${r.count48 === 4 ? ' (4 com 2 baralhos)' : ''}`);
       if (r.bigPile != null) parts.push(`monte grande ${r.bigPile}`);
       return parts.join(' · ');
     }
@@ -3806,6 +3896,7 @@
       document.getElementById('chk-p48').checked = r.p48;
       document.getElementById('sel-48mode').value = r.mode48;
       document.getElementById('chk-48burn').checked = r.burn48;
+      document.getElementById('sel-48count').value = String(r.count48 === 4 ? 4 : 8);
       if (p.mine) document.getElementById('inp-bigpile').value = r.bigPile;
       syncBigPileInput(decks);
       lastPickedMine = p.mine ? p.id : null;

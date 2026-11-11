@@ -158,7 +158,7 @@ window.CoreDiff = (() => {
   }
 
   // ---- Uma partida ---------------------------------------------------------------------
-  const BASE = { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false };
+  const BASE = { decks: 1, jokers: 1, p2: true, draw2: 1, p7: true, p10: true, after10: 'next', pjoker: true, multijoker: 'once', p48: true, mode48: 'sequence', burn48: false, count48: 8 };
   const setUI = (r) => {
     const b = { ...BASE, ...r };
     document.getElementById('sel-decks').value = String(b.decks);
@@ -173,6 +173,7 @@ window.CoreDiff = (() => {
     document.getElementById('chk-p48').checked = b.p48;
     document.getElementById('sel-48mode').value = b.mode48;
     document.getElementById('chk-48burn').checked = b.burn48;
+    document.getElementById('sel-48count').value = String(b.count48);
   };
   const PERSONAS = ['easy', 'medium', 'hard'];
 
@@ -184,7 +185,8 @@ window.CoreDiff = (() => {
       p7: Math.random() < 0.85, p10: Math.random() < 0.85,
       after10: Math.random() < 0.5 ? 'next' : 'again',
       pjoker: Math.random() < 0.85, multijoker: Math.random() < 0.5 ? 'once' : 'per_joker',
-      p48: Math.random() < 0.85, mode48: Math.random() < 0.5 ? 'sequence' : 'together', burn48: Math.random() < 0.4
+      p48: Math.random() < 0.85, mode48: Math.random() < 0.5 ? 'sequence' : 'together', burn48: Math.random() < 0.4,
+      count48: Math.random() < 0.5 ? 8 : 4
     };
     const n = 2 + rnd(5);
     const mode = k % 10 === 9 ? 'tutorial' : (k % 4 === 3 ? 'sim' : 'normal');

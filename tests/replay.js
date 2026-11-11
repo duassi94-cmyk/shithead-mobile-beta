@@ -82,6 +82,9 @@ window.Replay = (() => {
         else if (type === 'READY_AUTO') {
           const p = G.players.find(pl => pl.id === pid);
           if (p) { markReadyByTakeover(p); if (G.phase === 'SWAP' && G.players.every(pl => pl.readySwap)) evaluateStartAndDirection(); }
+        } else if (type === 'UNREADY_RETURN') {
+          const p = G.players.find(pl => pl.id === pid);
+          if (p) markBackInSwap(p);
         } else executePlayerAction(pid, toAction(type, data));
         applied++;
       }

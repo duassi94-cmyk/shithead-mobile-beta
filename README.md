@@ -26,14 +26,14 @@ O objetivo é **não ser o último com cartas**. Quem sobra com cartas perde a r
 | **7** | O próximo só pode jogar 7 ou menos |
 | **10** | Queima o monte (as cartas saem do jogo) |
 | **Coringa** | As mãos giram entre os jogadores |
-| **4 iguais** (8 com 2 baralhos) | Invertem o sentido do jogo |
+| **4 iguais** (8 com 2 baralhos, ou 4 se a mesa escolher) | Invertem o sentido do jogo |
 
 Há estilos prontos (**Da casa**, **Clássico**, **Caótico**), com 1 ou 2 baralhos, e até 2 regras próprias salvas no aparelho. Para aprender, use o **Tutorial** na tela inicial.
 
 ## Recursos
 
 - **Contra bots:** três níveis (Tio Barnabé, Madame Lola e Dr. Chaos), partida na hora.
-- **Com amigos:** crie uma sala e mande o link ou o QR Code. A sala pode ser trancada, e quem cai da conexão volta para o mesmo lugar (um bot joga por ele enquanto isso).
+- **Com amigos:** crie uma sala e mande o link ou o QR Code. A sala pode ser trancada, e quem cai da conexão volta para o mesmo lugar. Nas regras da sala, o host escolhe se um bot joga pela pessoa enquanto isso ou se a mesa espera até 3 minutos ela voltar.
 - **Cronômetro opcional:** 15, 30 ou 60 s por jogada; no fim do tempo, o bot joga pela pessoa, ela recolhe o monte ou é só um aviso.
 - **Na mesa:** histórico das jogadas, regras da mesa, placar da sessão, reações (GOMBRA!, DORMIU??) e "+ iguais" para selecionar cartas de mesmo valor.
 - **Do seu jeito:** 4 cores nos naipes, verso das cartas, cor da mesa e mão à esquerda (para canhotos).

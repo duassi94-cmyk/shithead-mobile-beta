@@ -193,10 +193,14 @@ function sanitizeRules(r) {
     p48: b(r.p48, true),
     mode48: r.mode48 === 'together' ? 'together' : 'sequence',
     burn48: b(r.burn48, false),
+    // Com 2 baralhos: quantas iguais invertem (8, o padrão, ou 4 como com 1 baralho)
+    count48: Number(r.count48) === 4 ? 4 : 8,
     bigPile: sanitizeBigPile(r.bigPile, r.decks === 2 ? 2 : 1),
     // Cronômetro (segundos por jogada; 0 = sem) e o que acontece quando acaba
     timer: [15, 30, 60].includes(Number(r.timer)) ? Number(r.timer) : 0,
-    timeout: ['pickup', 'warn'].includes(r.timeout) ? r.timeout : 'bot'
+    timeout: ['pickup', 'warn'].includes(r.timeout) ? r.timeout : 'bot',
+    // Queda de conexão: 'bot' assume na hora (padrão) ou 'wait' = a mesa espera a pessoa voltar
+    drop: r.drop === 'wait' ? 'wait' : 'bot'
   };
 }
 
