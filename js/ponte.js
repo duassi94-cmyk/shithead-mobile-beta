@@ -11,6 +11,7 @@
                           histórico público de jogadas (PlayHistory)
      bots/ia.js           IA dos bots
      rede/sanitizar.js    limpeza de tudo que chega da rede, código da sala
+     rede/retransmissao.js  servidores TURN (Metered) para as partidas online
      mesa/componentes.js  desenho da mesa em componentes (Preact + htm, vendor/)
    O game.js (tela, rede, fluxo da partida) ainda é um script clássico que usa esses
    nomes como globais. Esta ponte os entrega em window e só então carrega o game.js,
@@ -29,6 +30,7 @@ import { Core } from './nucleo/motor.js';
 import { HISTORY_MAX, historyBefore, addHistory, historyText } from './nucleo/historico.js';
 import { AIEngine } from './bots/ia.js';
 import * as Sanitizar from './rede/sanitizar.js';
+import { Retransmissao } from './rede/retransmissao.js';
 import { Mesa } from './mesa/componentes.js';
 import { Aparencia } from './servicos/aparencia.js';
 
@@ -38,7 +40,7 @@ Aparencia.apply();
 Object.assign(window, {
   AppConfig, Store, LogDB, AvatarModule, NetLog, LoggerModule, SoundEngine,
   Rng, stateDigest, RulesEngine, Core, AIEngine,
-  Mesa, Aparencia,
+  Mesa, Aparencia, Retransmissao,
   PlayHistory: { MAX: HISTORY_MAX, before: historyBefore, add: addHistory, text: historyText }
 }, Sanitizar);
 

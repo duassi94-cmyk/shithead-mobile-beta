@@ -53,7 +53,7 @@ O jogo abre em tela cheia, com ícone próprio, como um app.
 ## Privacidade
 
 - Não há cadastro. Nome, foto, regras e preferências ficam só no seu aparelho.
-- Nas partidas online, os aparelhos conversam **diretamente** entre si. O servidor gratuito do [PeerJS](https://peerjs.com/) só serve para apresentar os aparelhos no começo.
+- Nas partidas online, os aparelhos conversam **diretamente** entre si. O servidor gratuito do [PeerJS](https://peerjs.com/) só serve para apresentar os aparelhos no começo. Em redes que não deixam a ligação direta (4G, por exemplo), os dados passam por um servidor de retransmissão do [Metered](https://www.metered.ca/), que só repassa o que já viaja entre os aparelhos.
 - Cada aparelho recebe só o que pode ver: as cartas escondidas dos outros nunca chegam até ele.
 - O log de partidas fica no aparelho e só sai dele se você baixá-lo ou copiá-lo (Ajustes → Ajuda e diagnóstico), por exemplo para relatar um problema.
 

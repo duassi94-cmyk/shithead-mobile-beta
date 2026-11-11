@@ -862,12 +862,26 @@
        8. CONEXÃO MULTIPLAYER P2P (PeerJS / WebRTC)
        - Sinalização: servidor público gratuito do PeerJS (0.peerjs.com). Ele só
          apresenta os aparelhos; depois os dados vão direto de um para o outro.
+       - Retransmissão (TURN) do Metered para redes que não deixam a ligação
+         direta (4G, CGNAT): js/rede/retransmissao.js.
        - O Host é a "mesa": guarda o estado, roda os bots e valida as jogadas.
        - Link/QR: ...?sala=1234 abre o jogo e entra direto na sala.
        ========================================================================== */
     // Beta e testes locais usam salas separadas das oficiais (convidados de um não entram no outro)
     const PEER_PREFIX = AppConfig.ENV === 'prod' ? 'shithead-mobile-v5-sala-' : 'shithead-mobile-beta-sala-';
     const CONN_OPTS = { reliable: true, serialization: 'json' };
+    // Cada nova tentativa de abrir/entrar numa sala ganha um número; uma tentativa
+    // antiga que termina de buscar a retransmissão depois disso é descartada
+    let peerGen = 0;
+    // Peer com os servidores de retransmissão (TURN) do Metered; sem eles, só STUN
+    // (ligação direta, como antes). Veja js/rede/retransmissao.js.
+    async function newPeer(id) {
+      const ice = await Retransmissao.getIceServers();
+      nlog('ice_servers', { source: ice.source, why: ice.why, ms: ice.ms, turn: ice.servers.some(s => String(s.urls).startsWith('turn')) });
+      NetLog.count('ice_src_' + ice.source);
+      const options = { config: { iceServers: ice.servers } };
+      return id ? new Peer(id, options) : new Peer(options);
+    }
     let wakeLock = null;
     let joinRoomCode = '';
     let guestJoinedRoom = ''; // sala em que o convidado entrou de fato (conexão aberta)
@@ -900,6 +914,7 @@
       pc.addEventListener('iceconnectionstatechange', () => {
         nlog('ice_state', { who, state: pc.iceConnectionState });
         NetLog.count('ice_' + pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') Retransmissao.forgetIceServers();
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') report();
       });
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') report();
@@ -1183,9 +1198,9 @@
     // trava da sala nem o log da sessão
     let hostRetryTimer = null;
     const REOPEN_WAITS_S = [3, 5, 10, 15, 20, 30]; // ~80 s: o servidor segura o nome por até ~1 min
-    function createHostRoom(attempt = 0, opts = {}) {
+    async function createHostRoom(attempt = 0, opts = {}) {
       clearTimeout(hostRetryTimer);
-      if (myPeer) myPeer.destroy();
+      if (myPeer) { try { myPeer.destroy(); } catch (e) {} myPeer = null; }
       isHost = true;
       // "Você" só faz sentido na própria tela: online, o host precisa de um nome
       if (!document.getElementById('inp-name').value.trim() && lobbySlots[0].name === 'Você') {
@@ -1200,7 +1215,12 @@
       setNetStatus('host-net-status', opts.resume ? `Reabrindo a sala ${roomCode}...` : 'Criando sala...', 'info');
       const t0 = Date.now();
       nlog('room_create', { attempt, resume: !!opts.resume, env: attempt === 0 ? NetLog.environment() : undefined });
-      const peer = new Peer(PEER_PREFIX + roomCode);
+      // Servidores de retransmissão (TURN) antes de abrir a sala; se o host fechou
+      // a sala ou abriu outra enquanto isso, esta tentativa para aqui
+      const gen = ++peerGen;
+      const code = roomCode;
+      const peer = await newPeer(PEER_PREFIX + code);
+      if (gen !== peerGen || !isHost || roomCode !== code) { try { peer.destroy(); } catch (e) {} return; }
       myPeer = peer;
 
       myPeer.on('open', () => {
@@ -1321,7 +1341,7 @@
       setNetStatus('host-net-status', `${slot ? slot.name : 'Um jogador'} saiu da sala.`, 'warn');
     }
 
-    function joinRoom(code) {
+    async function joinRoom(code) {
       code = normalizeRoomCode(code);
       if (!ROOM_CODE_RE.test(code)) {
         setNetStatus('join-net-status', `Digite o código da sala: ${ROOM_CODE_LEN} letras ou números (ex.: KX7RD).`, 'error');
@@ -1339,7 +1359,7 @@
 
       // A conexão antiga vira "velha": o fechamento dela não dispara outra reconexão
       if (hostConn) hostConn.__stale = true;
-      if (myPeer) myPeer.destroy();
+      if (myPeer) { try { myPeer.destroy(); } catch (e) {} myPeer = null; }
       clearTimeout(reconnectTimer);
       setNetStatus('join-net-status', `Conectando à sala ${code}...`, 'info');
       document.getElementById('join-box').style.display = 'flex';
@@ -1347,7 +1367,10 @@
       const t0 = Date.now();
       joinAttempts++;
       nlog('join_start', { attempt: joinAttempts, reason: lastLostReason || 'inicio', device: shortId(myPlayerId), env: joinAttempts === 1 ? NetLog.environment() : undefined });
-      const peer = new Peer();
+      const gen = ++peerGen;
+      const peer = await newPeer();
+      // Saiu da sala, ou já tentou entrar de novo, enquanto buscava a retransmissão
+      if (gen !== peerGen || isHost || joinRoomCode !== code) { try { peer.destroy(); } catch (e) {} return; }
       myPeer = peer;
 
       peer.on('open', () => {
@@ -1359,6 +1382,7 @@
           if (!conn.open && conn === hostConn) {
             nlog('conn_slow', { waitedS: 9, ice: conn.peerConnection ? conn.peerConnection.iceConnectionState : null });
             NetLog.count('conn_slow');
+            Retransmissao.forgetIceServers();
             setNetStatus('join-net-status', 'A conexão está demorando... Se não entrar, tente outra rede (Wi-Fi ↔ 4G).', 'warn');
             // Voltando para a sala (ex.: o host recarregou e o nome antigo ainda responde no
             // servidor): tenta de novo em vez de esperar para sempre
@@ -3490,6 +3514,8 @@
 
     function showView(name, { push = true, replace = false } = {}) {
       if (!LOBBY_VIEWS.includes(name)) name = 'home';
+      // Telas de jogo online: já busca a retransmissão (o Metered leva alguns segundos)
+      if (name === 'invite' || name === 'room') Retransmissao.prefetch();
       const prev = currentView;
       currentView = name;
       document.querySelectorAll('.lobby-view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
